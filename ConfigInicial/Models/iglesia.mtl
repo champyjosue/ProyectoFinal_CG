@@ -1,0 +1,137 @@
+# Si un canal de Kd es mayor que 1.0 el material es "brillante" (emisivo)
+newmtl zocalo
+Ka 0.20 0.20 0.20
+Kd 0.360 0.340 0.320
+Ks 0.05 0.05 0.05
+Ns 16.0
+d 1.0
+illum 2
+
+newmtl muro
+Ka 0.20 0.20 0.20
+Kd 0.420 0.380 0.350
+Ks 0.05 0.05 0.05
+Ns 16.0
+d 1.0
+illum 2
+
+newmtl techo
+Ka 0.20 0.20 0.20
+Kd 0.070 0.070 0.090
+Ks 0.05 0.05 0.05
+Ns 16.0
+d 1.0
+illum 2
+
+newmtl trim
+Ka 0.20 0.20 0.20
+Kd 0.620 0.580 0.500
+Ks 0.05 0.05 0.05
+Ns 16.0
+d 1.0
+illum 2
+
+newmtl tezontle
+Ka 0.20 0.20 0.20
+Kd 0.460 0.230 0.170
+Ks 0.05 0.05 0.05
+Ns 16.0
+d 1.0
+illum 2
+
+newmtl piedra_oscura
+Ka 0.20 0.20 0.20
+Kd 0.200 0.190 0.200
+Ks 0.05 0.05 0.05
+Ns 16.0
+d 1.0
+illum 2
+
+newmtl puerta
+Ka 0.20 0.20 0.20
+Kd 0.160 0.090 0.050
+Ks 0.05 0.05 0.05
+Ns 16.0
+d 1.0
+illum 2
+
+newmtl hueco
+Ka 0.20 0.20 0.20
+Kd 0.030 0.030 0.040
+Ks 0.05 0.05 0.05
+Ns 16.0
+d 1.0
+illum 2
+
+newmtl ventana_luz
+Ka 0.20 0.20 0.20
+Kd 1.500 1.000 0.350
+Ks 0.05 0.05 0.05
+Ns 16.0
+d 1.0
+illum 2
+
+newmtl muro_oscuro
+Ka 0.20 0.20 0.20
+Kd 0.200 0.190 0.200
+Ks 0.05 0.05 0.05
+Ns 16.0
+d 1.0
+illum 2
+
+newmtl santo
+Ka 0.20 0.20 0.20
+Kd 0.850 0.820 0.750
+Ks 0.05 0.05 0.05
+Ns 16.0
+d 1.0
+illum 2
+
+newmtl reloj
+Ka 0.20 0.20 0.20
+Kd 1.500 1.500 1.300
+Ks 0.05 0.05 0.05
+Ns 16.0
+d 1.0
+illum 2
+
+newmtl hierro
+Ka 0.20 0.20 0.20
+Kd 0.100 0.100 0.110
+Ks 0.05 0.05 0.05
+Ns 16.0
+d 1.0
+illum 2
+
+newmtl cupula
+Ka 0.20 0.20 0.20
+Kd 0.520 0.540 0.580
+Ks 0.05 0.05 0.05
+Ns 16.0
+d 1.0
+illum 2
+
+newmtl torre
+Ka 0.20 0.20 0.20
+Kd 0.340 0.320 0.310
+Ks 0.05 0.05 0.05
+Ns 16.0
+d 1.0
+illum 2
+
+newmtl torre_trim
+Ka 0.20 0.20 0.20
+Kd 0.600 0.560 0.490
+Ks 0.05 0.05 0.05
+Ns 16.0
+d 1.0
+illum 2
+
+newmtl torre_techo
+Ka 0.20 0.20 0.20
+Kd 0.300 0.260 0.240
+Ks 0.05 0.05 0.05
+Ns 16.0
+d 1.0
+illum 2
+

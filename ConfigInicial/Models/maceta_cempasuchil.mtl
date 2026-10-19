@@ -1,0 +1,73 @@
+# Si un canal de Kd es mayor que 1.0 el material es "brillante" (emisivo)
+newmtl maceta
+Ka 0.20 0.20 0.20
+Kd 0.620 0.300 0.160
+Ks 0.05 0.05 0.05
+Ns 16.0
+d 1.0
+illum 2
+
+newmtl tierra
+Ka 0.20 0.20 0.20
+Kd 0.150 0.090 0.050
+Ks 0.05 0.05 0.05
+Ns 16.0
+d 1.0
+illum 2
+
+newmtl tallo
+Ka 0.20 0.20 0.20
+Kd 0.150 0.380 0.100
+Ks 0.05 0.05 0.05
+Ns 16.0
+d 1.0
+illum 2
+
+newmtl caliz
+Ka 0.20 0.20 0.20
+Kd 0.200 0.400 0.100
+Ks 0.05 0.05 0.05
+Ns 16.0
+d 1.0
+illum 2
+
+newmtl petalo_oscuro
+Ka 0.20 0.20 0.20
+Kd 0.900 0.380 0.030
+Ks 0.05 0.05 0.05
+Ns 16.0
+d 1.0
+illum 2
+
+newmtl petalo
+Ka 0.20 0.20 0.20
+Kd 1.000 0.550 0.040
+Ks 0.05 0.05 0.05
+Ns 16.0
+d 1.0
+illum 2
+
+newmtl petalo_claro
+Ka 0.20 0.20 0.20
+Kd 1.000 0.720 0.120
+Ks 0.05 0.05 0.05
+Ns 16.0
+d 1.0
+illum 2
+
+newmtl hoja
+Ka 0.20 0.20 0.20
+Kd 0.100 0.420 0.120
+Ks 0.05 0.05 0.05
+Ns 16.0
+d 1.0
+illum 2
+
+newmtl hoja_oscura
+Ka 0.20 0.20 0.20
+Kd 0.070 0.300 0.080
+Ks 0.05 0.05 0.05
+Ns 16.0
+d 1.0
+illum 2
+

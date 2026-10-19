@@ -1,0 +1,9 @@
+# Si un canal de Kd es mayor que 1.0 el material es "brillante" (emisivo)
+newmtl plumaje_ala
+Ka 0.20 0.20 0.20
+Kd 0.120 0.120 0.170
+Ks 0.05 0.05 0.05
+Ns 16.0
+d 1.0
+illum 2
+

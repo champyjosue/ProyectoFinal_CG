@@ -1,0 +1,33 @@
+# Si un canal de Kd es mayor que 1.0 el material es "brillante" (emisivo)
+newmtl plumaje
+Ka 0.20 0.20 0.20
+Kd 0.100 0.100 0.140
+Ks 0.05 0.05 0.05
+Ns 16.0
+d 1.0
+illum 2
+
+newmtl pico
+Ka 0.20 0.20 0.20
+Kd 0.070 0.070 0.080
+Ks 0.05 0.05 0.05
+Ns 16.0
+d 1.0
+illum 2
+
+newmtl ojo
+Ka 0.20 0.20 0.20
+Kd 0.850 0.800 0.550
+Ks 0.05 0.05 0.05
+Ns 16.0
+d 1.0
+illum 2
+
+newmtl pata
+Ka 0.20 0.20 0.20
+Kd 0.120 0.110 0.110
+Ks 0.05 0.05 0.05
+Ns 16.0
+d 1.0
+illum 2
+

@@ -1,0 +1,49 @@
+# Si un canal de Kd es mayor que 1.0 el material es "brillante" (emisivo)
+newmtl cuerpo
+Ka 0.20 0.20 0.20
+Kd 0.100 0.080 0.050
+Ks 0.05 0.05 0.05
+Ns 16.0
+d 1.0
+illum 2
+
+newmtl cabeza
+Ka 0.20 0.20 0.20
+Kd 0.050 0.040 0.030
+Ks 0.05 0.05 0.05
+Ns 16.0
+d 1.0
+illum 2
+
+newmtl pronoto
+Ka 0.20 0.20 0.20
+Kd 0.700 0.200 0.100
+Ks 0.05 0.05 0.05
+Ns 16.0
+d 1.0
+illum 2
+
+newmtl luz_luciernaga
+Ka 0.20 0.20 0.20
+Kd 1.400 2.000 0.300
+Ks 0.05 0.05 0.05
+Ns 16.0
+d 1.0
+illum 2
+
+newmtl elitro
+Ka 0.20 0.20 0.20
+Kd 0.140 0.110 0.070
+Ks 0.05 0.05 0.05
+Ns 16.0
+d 1.0
+illum 2
+
+newmtl ala
+Ka 0.20 0.20 0.20
+Kd 0.750 0.750 0.700
+Ks 0.05 0.05 0.05
+Ns 16.0
+d 1.0
+illum 2
+

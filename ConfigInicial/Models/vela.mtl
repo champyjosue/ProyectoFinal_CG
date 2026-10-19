@@ -1,0 +1,33 @@
+# Si un canal de Kd es mayor que 1.0 el material es "brillante" (emisivo)
+newmtl plato
+Ka 0.20 0.20 0.20
+Kd 0.550 0.400 0.120
+Ks 0.05 0.05 0.05
+Ns 16.0
+d 1.0
+illum 2
+
+newmtl cera
+Ka 0.20 0.20 0.20
+Kd 0.930 0.880 0.750
+Ks 0.05 0.05 0.05
+Ns 16.0
+d 1.0
+illum 2
+
+newmtl pabilo
+Ka 0.20 0.20 0.20
+Kd 0.080 0.070 0.060
+Ks 0.05 0.05 0.05
+Ns 16.0
+d 1.0
+illum 2
+
+newmtl llama
+Ka 0.20 0.20 0.20
+Kd 2.000 1.500 0.400
+Ks 0.05 0.05 0.05
+Ns 16.0
+d 1.0
+illum 2
+

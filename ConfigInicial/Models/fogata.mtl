@@ -1,0 +1,65 @@
+# Si un canal de Kd es mayor que 1.0 el material es "brillante" (emisivo)
+newmtl piedra_oscura
+Ka 0.20 0.20 0.20
+Kd 0.220 0.220 0.240
+Ks 0.05 0.05 0.05
+Ns 16.0
+d 1.0
+illum 2
+
+newmtl piedra_gris
+Ka 0.20 0.20 0.20
+Kd 0.380 0.380 0.400
+Ks 0.05 0.05 0.05
+Ns 16.0
+d 1.0
+illum 2
+
+newmtl brasa
+Ka 0.20 0.20 0.20
+Kd 1.600 0.250 0.050
+Ks 0.05 0.05 0.05
+Ns 16.0
+d 1.0
+illum 2
+
+newmtl lena
+Ka 0.20 0.20 0.20
+Kd 0.340 0.200 0.100
+Ks 0.05 0.05 0.05
+Ns 16.0
+d 1.0
+illum 2
+
+newmtl lena_oscura
+Ka 0.20 0.20 0.20
+Kd 0.160 0.100 0.070
+Ks 0.05 0.05 0.05
+Ns 16.0
+d 1.0
+illum 2
+
+newmtl llama_naranja
+Ka 0.20 0.20 0.20
+Kd 2.000 0.900 0.100
+Ks 0.05 0.05 0.05
+Ns 16.0
+d 1.0
+illum 2
+
+newmtl llama_roja
+Ka 0.20 0.20 0.20
+Kd 2.000 0.350 0.050
+Ks 0.05 0.05 0.05
+Ns 16.0
+d 1.0
+illum 2
+
+newmtl llama_amarilla
+Ka 0.20 0.20 0.20
+Kd 2.000 1.700 0.450
+Ks 0.05 0.05 0.05
+Ns 16.0
+d 1.0
+illum 2
+

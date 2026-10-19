@@ -35,12 +35,9 @@ struct Texture
 class Mesh
 {
 public:
-
     vector<Vertex> vertices;
     vector<GLuint> indices;
     vector<Texture> textures;
-
-    // Color del material obtenido del .mtl
     glm::vec3 materialColor;
 
     Mesh(vector<Vertex> vertices,
@@ -91,13 +88,14 @@ public:
             glBindTexture(GL_TEXTURE_2D, this->textures[i].id);
         }
 
-        // Mandamos el color del material al shader
+        // Color del material (.mtl)
         glUniform3fv(
             glGetUniformLocation(shader.Program, "materialColor"),
             1,
             glm::value_ptr(this->materialColor)
         );
 
+        // Bandera: 1 si tiene textura, 0 si usa solo color del .mtl
         glUniform1i(
             glGetUniformLocation(shader.Program, "hasTexture"),
             this->textures.size() > 0 ? 1 : 0
@@ -127,7 +125,6 @@ public:
     }
 
 private:
-
     GLuint VAO, VBO, EBO;
 
     void setupMesh()
@@ -139,7 +136,6 @@ private:
         glBindVertexArray(this->VAO);
 
         glBindBuffer(GL_ARRAY_BUFFER, this->VBO);
-
         glBufferData(
             GL_ARRAY_BUFFER,
             this->vertices.size() * sizeof(Vertex),
@@ -148,7 +144,6 @@ private:
         );
 
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, this->EBO);
-
         glBufferData(
             GL_ELEMENT_ARRAY_BUFFER,
             this->indices.size() * sizeof(GLuint),
@@ -189,4 +184,3 @@ private:
         glBindVertexArray(0);
     }
 };
-
