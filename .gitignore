@@ -399,3 +399,14 @@ FodyWeavers.xsd
 
 # JetBrains Rider
 *.sln.iml
+
+# Dependencia GLEW necesaria para compilar (no es un resultado de compilacion).
+!/External Libraries/GLEW/lib/
+!/External Libraries/GLEW/lib/Release/
+!/External Libraries/GLEW/lib/Release/Win32/
+!/External Libraries/GLEW/lib/Release/Win32/glew32.lib
+/bin/
+/obj/
+
+# Modelos Wavefront: son recursos del proyecto, no objetos del compilador.
+!/ConfigInicial/Models/*.obj
