@@ -1,6 +1,6 @@
 // Proyecto Final / Base Practicas 8 y 9
 // Equipo 12
-// Numero de cuenta: 421122006
+// Números de cuenta: 421122006 | 320173985
 
 #include <iostream>
 #include <cmath>
@@ -184,11 +184,13 @@ int main()
 
     // CARGA DE MODELOS
     Model Piso((char*)"Models/piso.obj");
-    Model TumbaTransparente((char*)"Models/TumbaTransparente.obj");
+    // TODO: Reactivar la carga y el dibujo cuando se agregue Models/TumbaTransparente.obj.
+    // Model TumbaTransparente((char*)"Models/TumbaTransparente.obj");
     Model sol((char*)"Models/SunCute.obj");
     Model luna((char*)"Models/Luna.obj");
     Model flor((char*)"Models/cartoon_flower.obj");
-    Model hongo((char*)"Models/Blue+Mushroom.obj");
+    // TODO: Reactivar la carga y el dibujo cuando se agregue Models/Blue+Mushroom.obj.
+    // Model hongo((char*)"Models/Blue+Mushroom.obj");
     Model tumba((char*)"Models/Tumba.obj");
     Model tumba2((char*)"Models/Tumba2.obj");
     Model tumba3((char*)"Models/Tumba3.obj");
@@ -400,11 +402,12 @@ int main()
         glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(modelFlor2));
         flor.Draw(lightingShader);
 
-        glm::mat4 modelHongo(1.0f);
-        modelHongo = glm::translate(modelHongo, glm::vec3(0.2f, -0.89f, 1.28f));
-        modelHongo = glm::scale(modelHongo, glm::vec3(0.15f, 0.15f, 0.15f));
-        glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(modelHongo));
-        hongo.Draw(lightingShader);
+        // TODO: Reactivar junto con la carga de Models/Blue+Mushroom.obj.
+        // glm::mat4 modelHongo(1.0f);
+        // modelHongo = glm::translate(modelHongo, glm::vec3(0.2f, -0.89f, 1.28f));
+        // modelHongo = glm::scale(modelHongo, glm::vec3(0.15f, 0.15f, 0.15f));
+        // glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(modelHongo));
+        // hongo.Draw(lightingShader);
 
         // Modelos luminosos
         glm::mat4 modelFogata(1.0f);
@@ -538,19 +541,20 @@ int main()
 
         // 5. DIBUJO DE MODELOS CON TRANSPARENCIA-->Siempre al final del ciclo
 
+        // TODO: Reactivar junto con la carga de Models/TumbaTransparente.obj.
         // Tumba Transparente (con transparency = 1)
-        glm::mat4 modelT(1.0f);
-        modelT = glm::translate(modelT, glm::vec3(-1.5f, -1.3f, 0.0f));
-        modelT = glm::rotate(modelT, glm::radians(180.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-        modelT = glm::scale(modelT, glm::vec3(0.6f, 0.6f, 0.6f));
-        glEnable(GL_BLEND);
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-        glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(modelT));
-        glUniform1i(glGetUniformLocation(lightingShader.Program, "transparency"), 1); // 1 = Activa transparencia
-        TumbaTransparente.Draw(lightingShader);
-        glDisable(GL_BLEND);
+        // glm::mat4 modelT(1.0f);
+        // modelT = glm::translate(modelT, glm::vec3(-1.5f, -1.3f, 0.0f));
+        // modelT = glm::rotate(modelT, glm::radians(180.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+        // modelT = glm::scale(modelT, glm::vec3(0.6f, 0.6f, 0.6f));
+        // glEnable(GL_BLEND);
+        // glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        // glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(modelT));
+        // glUniform1i(glGetUniformLocation(lightingShader.Program, "transparency"), 1); // 1 = Activa transparencia
+        // TumbaTransparente.Draw(lightingShader);
+        // glDisable(GL_BLEND);
         // Importante: regresamos transparency a 0 para no afectar el siguiente frame
-        glUniform1i(glGetUniformLocation(lightingShader.Program, "transparency"), 0);
+        // glUniform1i(glGetUniformLocation(lightingShader.Program, "transparency"), 0);
         glBindVertexArray(0);
 
         glfwSwapBuffers(window);
@@ -591,11 +595,9 @@ void DoMovement()
 
 void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mode)
 {
-    if (GLFW_KEY_ESCAPE == key && GLFW_PRESS == action)
-        glfwSetWindowShouldClose(window, GL_TRUE);
+    if (GLFW_KEY_ESCAPE == key && GLFW_PRESS == action)glfwSetWindowShouldClose(window, GL_TRUE);
 
-    if (key >= 0 && key < 1024)
-    {
+    if (key >= 0 && key < 1024){
         if (action == GLFW_PRESS)
             keys[key] = true;
         else if (action == GLFW_RELEASE)
