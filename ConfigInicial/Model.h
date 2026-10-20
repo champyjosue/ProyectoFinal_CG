@@ -6,6 +6,7 @@
 #include <iostream>
 #include <map>
 #include <vector>
+#include <limits>
 
 #include <GL/glew.h>
 #include <glm/glm.hpp>
@@ -25,20 +26,26 @@ GLint TextureFromFile(const char* path, string directory);
 class Model
 {
 public:
-    Model(GLchar* path)
+    Model(const GLchar* path)
     {
         this->loadModel(path);
     }
 
-    void Draw(Shader shader)
+    void Draw(Shader shader, GLuint diffuseOverride = 0)
     {
         for (GLuint i = 0; i < this->meshes.size(); i++)
         {
-            this->meshes[i].Draw(shader);
+            this->meshes[i].Draw(shader, diffuseOverride);
         }
     }
 
+    const glm::vec3& BoundsMin() const { return boundsMin; }
+    const glm::vec3& BoundsMax() const { return boundsMax; }
+    bool IsLoaded() const { return !meshes.empty(); }
+
 private:
+    glm::vec3 boundsMin = glm::vec3((std::numeric_limits<float>::max)());
+    glm::vec3 boundsMax = glm::vec3(-(std::numeric_limits<float>::max)());
     vector<Mesh> meshes;
     string directory;
     vector<Texture> textures_loaded;
@@ -52,7 +59,7 @@ private:
             aiProcess_Triangulate | aiProcess_FlipUVs | aiProcess_GenSmoothNormals
         );
 
-        if (!scene || scene->mFlags == AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode)
+        if (!scene || (scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE) || !scene->mRootNode)
         {
             cout << "ERROR::ASSIMP:: " << importer.GetErrorString() << endl;
             return;
@@ -94,6 +101,8 @@ private:
             vector.y = mesh->mVertices[i].y;
             vector.z = mesh->mVertices[i].z;
             vertex.Position = vector;
+            boundsMin = glm::min(boundsMin, vector);
+            boundsMax = glm::max(boundsMax, vector);
 
             // Normals (lectura segura)
             if (mesh->HasNormals())

@@ -79,6 +79,12 @@ uniform int transparency;
 // Color del .mtl y bandera de textura enviados por Mesh.h
 uniform vec3 materialColor;
 uniform int hasTexture;
+// Defaults conservan el comportamiento de otros ejemplos que usan este shader.
+uniform vec2 textureTiling = vec2(1.0);
+uniform vec3 emissionColor = vec3(0.0);
+uniform vec3 objectGlow = vec3(0.0);
+uniform float emissionPulse = 1.0;
+uniform bool hasSpecularTexture = false;
 
 // Valores base del fragmento
 vec3 baseDiffuse;
@@ -99,14 +105,14 @@ void main()
     // 1. Determinar color base (Textura vs Material .mtl)
     if (hasTexture == 1)
     {
-        vec4 t = texture(texture_diffuse1, TexCoords);
+        vec4 t = texture(texture_diffuse1, TexCoords * textureTiling);
         baseDiffuse = t.rgb;
 
         // Si el PNG tiene canal alfa real (< 0.99), usamos t.a;
         // si no (ej. JPG con fondo negro como TumbaTransparente), usamos t.r
         maskAlpha = (t.a < 0.99) ? t.a : t.r;
 
-        baseSpecular = texture(texture_specular1, TexCoords).rgb;
+        baseSpecular = hasSpecularTexture ? texture(texture_specular1, TexCoords * textureTiling).rgb : vec3(0.12);
     }
     else
     {
@@ -149,12 +155,15 @@ void main()
     else if (hasTexture == 1)
     {
         // Recorte basico para hojas de arboles/flores en PNG con fondo transparente
-        vec4 t = texture(texture_diffuse1, TexCoords);
+        vec4 t = texture(texture_diffuse1, TexCoords * textureTiling);
         if (t.a < 0.1)
             discard;
     }
 
-    color = vec4(result, finalAlpha);
+    // Llamas/vidrios visibles en la noche sin ampliar las cinco luces puntuales.
+    result += emissionColor * emissionPulse + objectGlow;
+    vec3 mapped = vec3(1.0) - exp(-max(result, vec3(0.0)));
+    color = vec4(pow(mapped, vec3(1.0 / 2.2)), finalAlpha);
 }
 
 vec3 CalcDirLight(DirLight light, vec3 normal, vec3 viewDir)

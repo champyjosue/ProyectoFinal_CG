@@ -4,7 +4,6 @@
 #include <vector>
 
 // GL Includes
-#define GLEW_STATIC
 #include <GL/glew.h>
 
 #include <glm/glm.hpp>
@@ -60,15 +59,18 @@ public:
 	void ProcessKeyboard(Camera_Movement direction, GLfloat deltaTime)
 	{
 		GLfloat velocity = this->movementSpeed * deltaTime;
+		glm::vec3 movementFront = this->front;
+		if (walking)
+			movementFront = glm::normalize(glm::vec3(front.x, 0.0f, front.z));
 
 		if (direction == FORWARD)
 		{
-			this->position += this->front * velocity;
+			this->position += movementFront * velocity;
 		}
 
 		if (direction == BACKWARD)
 		{
-			this->position -= this->front * velocity;
+			this->position -= movementFront * velocity;
 		}
 
 		if (direction == LEFT)
@@ -80,6 +82,16 @@ public:
 		{
 			this->position += this->right * velocity;
 		}
+		if (walking) this->position.y = eyeHeight;
+	}
+
+	// Optativo: los otros ejercicios conservan su camara libre por defecto.
+	void SetWalkingMode(GLfloat height = 1.7f, GLfloat speed = 3.5f)
+	{
+		walking = true;
+		eyeHeight = height;
+		movementSpeed = speed;
+		position.y = height;
 	}
 
 	// Processes input received from a mouse input system. Expects the offset value in both the x and y direction.
@@ -146,6 +158,8 @@ private:
 	GLfloat movementSpeed;
 	GLfloat mouseSensitivity;
 	GLfloat zoom;
+	bool walking = false;
+	GLfloat eyeHeight = 1.7f;
 
 	// Calculates the front vector from the Camera's (updated) Eular Angles
 	void updateCameraVectors()
