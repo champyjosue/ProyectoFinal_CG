@@ -49,7 +49,7 @@ Las superficies se separan en altura: piso a Y = 0, caminos a Y = 0.04, juntas a
 
 ## Ejecutar en Visual Studio
 
-1. Abrir `ConfigInicial.sln` desde la carpeta `ProyectoFinal_CG`.
+1. Abrir `ConfigInicial.sln` desde la carpeta `PrototipoMixquicV1` del escritorio.
 2. Seleccionar **Debug | x86**. En las propiedades del proyecto, la plataforma se llama **Win32**.
 3. Si Visual Studio ya estaba abierto, aceptar la recarga de los archivos modificados.
 4. Compilar con **Ctrl + Mayús + B** y ejecutar con **F5**.
@@ -108,3 +108,7 @@ Se dejan TODO para acceso arquitectónico, bardas perimetrales, árboles/vegetac
 También quedan pendientes recuperar `TumbaTransparente.obj` y `Blue+Mushroom.obj`, añadir colisiones si se requieren, evaluar rendimiento en otras GPU y realizar la revisión manual de la versión con el equipo. El usuario puede atravesar objetos si se aparta del recorrido: no se agregó un sistema de colisiones. Esta versión tampoco agrega sombras dinámicas ni bloom.
 
 La DLL de Assimp sigue siendo la incluida en la base y depende del runtime de depuración de Visual C++; no se cambió por otra distribución.
+
+## Ubicacion de entrega
+
+El proyecto completo esta en `PrototipoMixquicV1` del escritorio. La carpeta anterior `ProyectoFinal_CG` se conserva como respaldo. No se requieren archivos de Python para compilar, ejecutar ni generar las capturas; las herramientas auxiliares de preparacion permanecen fuera del proyecto entregado.

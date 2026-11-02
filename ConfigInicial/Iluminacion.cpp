@@ -413,6 +413,10 @@ int main(int argc, char** argv)
     Model maceta((char*)"Models/maceta_cempasuchil.obj");
     Model macizo((char*)"Models/cempasuchil_macizo.obj");
     Model cempasuchil("Models/cempasuchil.obj");
+    // Primer lote original creado en Blender 5.2.3 LTS; cada OBJ se carga una vez.
+    Model visitanteNuevo("Models/BlenderV11/visitante_veladora.obj");
+    Model arregloNuevo("Models/BlenderV11/arreglo_cempasuchil.obj");
+    Model lapidaNueva("Models/BlenderV11/lapida_memoria.obj");
     Model cuervoCuerpo((char*)"Models/cuervo_vuelo_cuerpo.obj");
     Model cuervoAlaDer((char*)"Models/cuervo_ala_der.obj");
     Model cuervoAlaIzq((char*)"Models/cuervo_ala_izq.obj");
@@ -426,7 +430,8 @@ int main(int argc, char** argv)
 
     // La validacion impide aceptar un prototipo con recursos faltantes.
     for (Model* model : {&Piso,&sol,&luna,&flor,&tumba,&tumba2,&tumba3,&iglesia,&cuervo,&maceta,
-        &macizo,&cempasuchil,&cuervoCuerpo,&cuervoAlaDer,&cuervoAlaIzq,&fogata,&vela,&luciernaga,&farol,&veladora})
+        &macizo,&cempasuchil,&cuervoCuerpo,&cuervoAlaDer,&cuervoAlaIzq,&fogata,&vela,&luciernaga,&farol,&veladora,
+        &visitanteNuevo,&arregloNuevo,&lapidaNueva})
         if (!model->IsLoaded()) { glfwTerminate(); return EXIT_FAILURE; }
 
     // ETAPA 2 / ZONA 3: templo centrado por su caja real, fachada hacia +Z.
@@ -466,15 +471,19 @@ int main(int argc, char** argv)
         {
             const float x = side == 0 ? -10.7f : 10.7f;
             const int kind = (row + side) % 3;
-            const float yaw = side == 0 ? 12.0f : -12.0f;
-            AddPlacement(graves, *graveModels[kind], glm::vec3(x,0.07f,graveZ[row]), graveScales[kind], yaw);
+            // Correccion: girar 180 grados en Y conservando la variacion de cada lateral.
+            const float yaw = 180.0f + (side == 0 ? 12.0f : -12.0f);
+            // La primera sepultura muestra la variante nueva; siguen siendo nueve.
+            Model& graveModel = side == 0 && row == 0 ? lapidaNueva : *graveModels[kind];
+            const float graveScale = side == 0 && row == 0 ? 1.25f : graveScales[kind];
+            AddPlacement(graves, graveModel, glm::vec3(x,0.07f,graveZ[row]), graveScale, yaw);
             surfaces.push_back({ {x,0.035f,graveZ[row]}, {4.2f,0.07f,4.5f}, plotColor });
             // Conexiones cortas a los pasos laterales y acceso a cada sepultura.
             surfaces.push_back({ {side == 0 ? -8.0f : 8.0f,0.02f,graveZ[row]+2.25f}, {3.6f,0.04f,0.85f}, stone });
         }
     // ZONA 6: novena tumba, destacada sobre una plataforma de ofrenda.
     surfaces.push_back({ {0,0.05f,-18.45f}, {6.6f,0.1f,5.0f}, plotColor });
-    AddPlacement(graves, tumba2, glm::vec3(0,0.1f,-18.9f), 0.62f);
+    AddPlacement(graves, tumba2, glm::vec3(0,0.1f,-18.9f), 0.62f, 180.0f);
     if (!ValidateLayout(church, graves))
     {
         std::cerr << "ERROR: interseccion en la distribucion arquitectonica." << std::endl;
@@ -506,6 +515,7 @@ int main(int argc, char** argv)
             for (int candle = 0; candle < 5; ++candle)
                 AddPlacement(decorations, veladora, glm::vec3(x-1.28f+candle*0.64f,0.07f,z+1.65f), 1.45f);
             AddPlacement(decorations, vela, glm::vec3(x+1.45f,0.07f,z+0.8f), 1.1f);
+            AddPlacement(decorations, arregloNuevo, glm::vec3(x-1.9f,0.07f,z+1.25f), 1.0f);
         }
     // Fachada: flores y faroles flanquean el desembarco, sin tapar la puerta.
     for (float x : {-3.0f,3.0f})
@@ -533,6 +543,15 @@ int main(int argc, char** argv)
     }
     AddPlacement(decorations, farol, glm::vec3(-4.8f,0,-16.9f), 2.4f);
     AddPlacement(decorations, farol, glm::vec3(4.8f,0,-16.9f), 2.4f);
+    // Arreglos y visitantes nuevos, fuera del recorrido peatonal.
+    for (float x : {-1.3f,1.3f})
+        AddPlacement(decorations, arregloNuevo, glm::vec3(x,0.1f,-20.1f), 1.1f);
+    AddPlacement(decorations, visitanteNuevo, glm::vec3(-8.2f,0,8.5f), 1.0f, -101.0f);
+    AddPlacement(decorations, visitanteNuevo, glm::vec3(13.2f,0,2.4f), 0.97f, -99.0f);
+    AddPlacement(decorations, visitanteNuevo, glm::vec3(-8.2f,0,-10.0f), 1.02f, -90.0f);
+    AddPlacement(decorations, visitanteNuevo, glm::vec3(-4.0f,0,-20.0f), 1.0f, 75.0f);
+    AddPlacement(decorations, visitanteNuevo, glm::vec3(4.0f,0,-20.0f), 0.96f, -75.0f);
+    AddPlacement(decorations, visitanteNuevo, glm::vec3(-4.5f,0,16.0f), 1.0f, 180.0f);
     if (!ValidateDecorations(church, graves, decorations)) { glfwTerminate(); return EXIT_FAILURE; }
     if (validate && !ValidateAnimationPaths(church,graves,cuervoCuerpo,cuervoAlaDer,cuervoAlaIzq,luciernaga,sol,luna))
     { std::cerr << "ERROR: trayectoria de animacion." << std::endl; glfwTerminate(); return EXIT_FAILURE; }
@@ -583,7 +602,10 @@ int main(int argc, char** argv)
         {"10-luna-t6", {0,3,14}, {0,18,-22}, 6},
         {"11-luna-t20", {0,3,14}, {0,18,-22}, 20},
         {"12-luciernaga-t22", {7.3f,1.7f,5}, {7.8f,1.65f,2}, 22},
-        {"13-luciernaga-t24", {7.3f,1.7f,5}, {7.8f,1.65f,2}, 24}
+        {"13-luciernaga-t24", {7.3f,1.7f,5}, {7.8f,1.65f,2}, 24},
+        {"14-visitante-blender", {-10.4f,1.4f,9.4f}, {-8.2f,1.0f,8.5f}, 24},
+        {"15-arreglo-blender", {-13.7f,1.0f,10.6f}, {-12.6f,0.5f,9.25f}, 24},
+        {"16-lapida-blender", {-9.0f,1.4f,11.4f}, {-10.7f,0.9f,8.0f}, 24}
     };
     int captureIndex = 0;
     int resultCode = EXIT_SUCCESS;

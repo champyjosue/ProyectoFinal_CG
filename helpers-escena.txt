@@ -1,0 +1,119 @@
+// Colocacion basada en limites reales: el origen de cada OBJ puede ser distinto.
+struct Bounds { glm::vec3 min, max; };
+struct Placement
+{
+    Model* model;
+    glm::mat4 matrix;
+    Bounds bounds;
+};
+struct Surface
+{
+    glm::vec3 center, size, color;
+};
+
+const float GROUND_Y = 0.0f;
+const float EYE_HEIGHT = 1.7f;
+const bool ESCENA_NOCTURNA = true; // Conserva el sistema orbital sin dibujar el Sol caricaturesco.
+
+Bounds WorldBounds(const Model& model, const glm::mat4& matrix)
+{
+    Bounds bounds = { glm::vec3(1.0e10f), glm::vec3(-1.0e10f) };
+    for (int mask = 0; mask < 8; ++mask)
+    {
+        glm::vec3 corner(
+            (mask & 1) ? model.BoundsMax().x : model.BoundsMin().x,
+            (mask & 2) ? model.BoundsMax().y : model.BoundsMin().y,
+            (mask & 4) ? model.BoundsMax().z : model.BoundsMin().z);
+        glm::vec3 world = glm::vec3(matrix * glm::vec4(corner, 1.0f));
+        bounds.min = glm::min(bounds.min, world);
+        bounds.max = glm::max(bounds.max, world);
+    }
+    return bounds;
+}
+
+Placement Grounded(Model& model, const glm::vec3& position, const glm::vec3& scale, float yaw = 0.0f)
+{
+    const glm::vec3 center = (model.BoundsMin() + model.BoundsMax()) * 0.5f;
+    glm::mat4 matrix = glm::translate(glm::mat4(1.0f), position);
+    matrix = glm::rotate(matrix, glm::radians(yaw), glm::vec3(0.0f, 1.0f, 0.0f));
+    matrix = glm::scale(matrix, scale);
+    matrix = glm::translate(matrix, glm::vec3(-center.x, -model.BoundsMin().y, -center.z));
+    return { &model, matrix, WorldBounds(model, matrix) };
+}
+
+void AddPlacement(std::vector<Placement>& items, Model& model, const glm::vec3& position, float scale = 1.0f, float yaw = 0.0f)
+{
+    items.push_back(Grounded(model, position, glm::vec3(scale), yaw));
+}
+
+void DrawPlacement(const Placement& item, Shader& shader, GLuint diffuseOverride = 0)
+{
+    glUniformMatrix4fv(glGetUniformLocation(shader.Program, "model"), 1, GL_FALSE, glm::value_ptr(item.matrix));
+    item.model->Draw(shader, diffuseOverride);
+}
+
+void DrawSurface(const Surface& surface, GLuint vao, Shader& shader)
+{
+    glm::mat4 matrix = glm::scale(glm::translate(glm::mat4(1.0f), surface.center), surface.size);
+    glUniformMatrix4fv(glGetUniformLocation(shader.Program, "model"), 1, GL_FALSE, glm::value_ptr(matrix));
+    glUniform3fv(glGetUniformLocation(shader.Program, "materialColor"), 1, glm::value_ptr(surface.color));
+    glUniform3f(glGetUniformLocation(shader.Program, "emissionColor"), 0.0f, 0.0f, 0.0f);
+    glUniform1i(glGetUniformLocation(shader.Program, "hasTexture"), 0);
+    glBindVertexArray(vao);
+    glDrawArrays(GL_TRIANGLES, 0, 36);
+    glBindVertexArray(0);
+}
+
+bool OverlapXZ(const Bounds& a, const Bounds& b)
+{
+    return a.min.x < b.max.x && a.max.x > b.min.x && a.min.z < b.max.z && a.max.z > b.min.z;
+}
+
+bool ValidateLayout(const Placement& church, const std::vector<Placement>& graves)
+{
+    if (graves.size() != 9) return false;
+    const Bounds centralPath = { glm::vec3(-2.0f, 0.0f, -2.6f), glm::vec3(2.0f, 1.0f, 19.0f) };
+    for (size_t i = 0; i < graves.size(); ++i)
+    {
+        const Bounds& b = graves[i].bounds;
+        if (b.min.x < -17.0f || b.max.x > 17.0f || b.min.z < -21.0f || b.max.z > 21.0f) return false;
+        if (OverlapXZ(b, church.bounds) || OverlapXZ(b, centralPath)) return false;
+        for (size_t j = i + 1; j < graves.size(); ++j)
+            if (OverlapXZ(b, graves[j].bounds)) return false;
+    }
+    const Bounds& c = church.bounds;
+    if (c.min.x < -17.0f || c.max.x > 17.0f || c.min.z < -21.0f || c.max.z > 21.0f) return false;
+    // Recorrido con margen peatonal de 0.35: entrada, atrio, fachada, lado derecho,
+    // trasera/Alumbrada y regreso por el lado izquierdo. No atraviesa el templo.
+    const glm::vec2 route[] = { {0,19}, {0,12}, {0,-1.6f}, {6.2f,-1.6f}, {6.2f,-15.3f},
+        {0,-15.3f}, {-6.2f,-15.3f}, {-6.2f,-1.6f}, {0,-1.6f} };
+    for (size_t i = 1; i < sizeof(route) / sizeof(route[0]); ++i)
+        for (int step = 0; step <= 100; ++step)
+        {
+            glm::vec2 p = glm::mix(route[i-1], route[i], step / 100.0f);
+            Bounds pedestrian = { glm::vec3(p.x - 0.35f, 0, p.y - 0.35f), glm::vec3(p.x + 0.35f, EYE_HEIGHT, p.y + 0.35f) };
+            if (OverlapXZ(pedestrian, c)) return false;
+            for (const Placement& grave : graves) if (OverlapXZ(pedestrian, grave.bounds)) return false;
+        }
+    std::cout << "VALIDACION: 9 tumbas (4 izquierda, 4 derecha, 1 altar), sin cruces; recorrido central y lateral libre." << std::endl;
+    std::cout << "TEMPLO: X [" << c.min.x << ", " << c.max.x << "], Z [" << c.min.z << ", " << c.max.z << "], altura " << c.max.y << std::endl;
+    return true;
+}
+
+bool CaptureFrame(const std::string& filename)
+{
+    std::vector<unsigned char> pixels(SCREEN_WIDTH * SCREEN_HEIGHT * 3);
+    std::vector<unsigned char> upright(pixels.size());
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glReadBuffer(GL_BACK);
+    glReadPixels(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, GL_RGB, GL_UNSIGNED_BYTE, pixels.data());
+    const size_t row = static_cast<size_t>(SCREEN_WIDTH) * 3;
+    for (int y = 0; y < SCREEN_HEIGHT; ++y)
+        std::copy(pixels.begin() + y * row, pixels.begin() + (y + 1) * row, upright.begin() + (SCREEN_HEIGHT - 1 - y) * row);
+    return SOIL_save_image(filename.c_str(), SOIL_SAVE_TYPE_BMP, SCREEN_WIDTH, SCREEN_HEIGHT, 3, upright.data()) != 0;
+}
+
+// TODO v1.1: acceso arquitectonico, bardas perimetrales, arboles y vegetacion.
+// TODO v1.1: personajes, ofrendas adicionales, sahumerios y humo.
+// TODO v1.1: objetos interactivos y audio ambiental.
+

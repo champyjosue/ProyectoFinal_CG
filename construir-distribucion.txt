@@ -1,0 +1,120 @@
+    // ETAPA 2 / ZONA 3: templo centrado por su caja real, fachada hacia +Z.
+    // Planta final X [-4.48,4.48], Z [-13.715,-3.285]; altura 8.5225.
+    const Placement church = Grounded(iglesia, glm::vec3(0, GROUND_Y, -8.5f), glm::vec3(0.7f));
+    const Placement ground = Grounded(Piso, glm::vec3(0, GROUND_Y, 0), glm::vec3(6.8f, 1.0f, 8.4f));
+    std::vector<Surface> surfaces;
+    const glm::vec3 stone(0.46f, 0.42f, 0.35f);
+    const glm::vec3 border(0.22f, 0.20f, 0.17f);
+    const glm::vec3 plotColor(0.28f, 0.25f, 0.21f);
+    // ZONA 1: apertura de acceso y dos marcadores simples, sin inventar un arco.
+    surfaces.push_back({ {-3.2f,0.325f,17.5f}, {0.7f,0.65f,0.7f}, border });
+    surfaces.push_back({ { 3.2f,0.325f,17.5f}, {0.7f,0.65f,0.7f}, border });
+    // ZONA 2: atrio despejado, de 12 x 6.
+    surfaces.push_back({ {0,0.02f,12.5f}, {12,0.04f,6}, stone });
+    // ZONA 4: eje central hasta la fachada, nunca por dentro del templo.
+    surfaces.push_back({ {0,0.02f,8.2f}, {4,0.04f,21.6f}, stone });
+    surfaces.push_back({ {0,0.02f,-1.6f}, {14.6f,0.04f,2.2f}, stone });
+    // Pasos de 2.2 unidades: ambos lados conectan con el recorrido posterior.
+    for (float x : {-6.2f, 6.2f})
+        surfaces.push_back({ {x,0.02f,-8.45f}, {2.2f,0.04f,15.9f}, stone });
+    surfaces.push_back({ {0,0.02f,-15.3f}, {14.6f,0.04f,1.6f}, stone });
+    // Juntas sencillas sobre el camino, separadas en altura para evitar z-fighting.
+    for (float z = -0.4f; z < 19.0f; z += 1.3f)
+        surfaces.push_back({ {0,0.043f,z}, {3.96f,0.006f,0.035f}, border });
+    for (float x : {-6.2f,6.2f})
+        for (float z = -14.8f; z < -2.4f; z += 1.3f)
+            surfaces.push_back({ {x,0.043f,z}, {2.16f,0.006f,0.035f}, border });
+
+    // ETAPA 3 / ZONA 5: cuatro sepulturas por lado; se reutilizan tres OBJ.
+    std::vector<Placement> graves;
+    Model* graveModels[] = { &tumba, &tumba2, &tumba3 };
+    const float graveScales[] = { 0.67f, 0.53f, 0.65f };
+    const float graveZ[] = { 8.0f, 2.0f, -4.0f, -10.0f };
+    for (int side = 0; side < 2; ++side)
+        for (int row = 0; row < 4; ++row)
+        {
+            const float x = side == 0 ? -10.7f : 10.7f;
+            const int kind = (row + side) % 3;
+            const float yaw = side == 0 ? 12.0f : -12.0f;
+            AddPlacement(graves, *graveModels[kind], glm::vec3(x,0.07f,graveZ[row]), graveScales[kind], yaw);
+            surfaces.push_back({ {x,0.035f,graveZ[row]}, {3.9f,0.07f,4.5f}, plotColor });
+            // Conexiones cortas a los pasos laterales y acceso a cada sepultura.
+            surfaces.push_back({ {side == 0 ? -8.0f : 8.0f,0.02f,graveZ[row]+2.25f}, {3.6f,0.04f,0.85f}, stone });
+        }
+    // ZONA 6: novena tumba, destacada sobre una plataforma de ofrenda.
+    surfaces.push_back({ {0,0.05f,-18.45f}, {6.6f,0.1f,5.0f}, plotColor });
+    AddPlacement(graves, tumba2, glm::vec3(0,0.1f,-18.9f), 0.62f);
+    if (!ValidateLayout(church, graves))
+    {
+        std::cerr << "ERROR: interseccion en la distribucion arquitectonica." << std::endl;
+        glfwTerminate();
+        return EXIT_FAILURE;
+    }
+
+    // ETAPA 4: decoracion existente; cada modelo se cargo una sola vez.
+    std::vector<Placement> decorations;
+    // Acceso y atrio: las macetas se mantienen fuera de la franja central.
+    for (float x : {-4.9f,4.9f})
+        for (float z : {10.5f,14.5f})
+            AddPlacement(decorations, maceta, glm::vec3(x,0.04f,z), 1.45f);
+    for (float x : {-2.7f,2.7f})
+        for (float z : {16.5f,8.5f,4.5f,0.5f})
+            AddPlacement(decorations, macizo, glm::vec3(x,0.0f,z), 1.05f);
+    for (float x : {-4.3f,4.3f})
+        AddPlacement(decorations, farol, glm::vec3(x,0.04f,12.5f), 2.1f);
+    AddPlacement(decorations, farol, glm::vec3(-4.0f,0,17.5f), ESC_FAROL);
+    // Ofrendas pequeñas en ocho tumbas, sin invadir los caminos laterales.
+    for (int side = 0; side < 2; ++side)
+        for (int row = 0; row < 4; ++row)
+        {
+            float x = side == 0 ? -10.7f : 10.7f;
+            float z = graveZ[row];
+            AddPlacement(decorations, maceta, glm::vec3(x-1.5f,0.07f,z-0.8f), 1.05f, 20.0f*row);
+            AddPlacement(decorations, macizo, glm::vec3(x+1.5f,0.07f,z-0.65f), 0.95f);
+            AddPlacement(decorations, cempasuchil, glm::vec3(x-1.4f,0.07f,z+0.8f), 1.0f);
+            for (int candle = 0; candle < 5; ++candle)
+                AddPlacement(decorations, veladora, glm::vec3(x-1.28f+candle*0.64f,0.07f,z+1.65f), 1.45f);
+            AddPlacement(decorations, vela, glm::vec3(x+1.45f,0.07f,z+0.8f), 1.1f);
+        }
+    // Fachada: flores y faroles flanquean el desembarco, sin tapar la puerta.
+    for (float x : {-3.0f,3.0f})
+    {
+        AddPlacement(decorations, maceta, glm::vec3(x,0.04f,-2.0f), 1.5f);
+        AddPlacement(decorations, farol, glm::vec3(x*1.4f,0,-2.0f), 2.3f);
+    }
+    // La Alumbrada: mayor densidad de flores y veladoras; centro de la composicion.
+    for (float x : {-2.2f,2.2f})
+        for (float z : {-19.7f,-18.5f,-17.3f})
+            AddPlacement(decorations, macizo, glm::vec3(x,0.1f,z), 1.25f);
+    for (float x : {-1.45f,1.45f})
+        AddPlacement(decorations, maceta, glm::vec3(x,0.1f,-18.9f), 1.2f);
+    for (float x : {-2.85f,2.85f})
+        for (int i = 0; i < 9; ++i)
+            AddPlacement(decorations, veladora, glm::vec3(x,0.1f,-20.3f+i*0.48f), 1.6f);
+    for (int row = 0; row < 2; ++row)
+        for (int i = 0; i < 9; ++i)
+            AddPlacement(decorations, row == 0 ? veladora : vela,
+                glm::vec3(-2.4f+i*0.6f,0.1f,-16.45f-row*0.55f), row == 0 ? 1.6f : 1.05f);
+    for (float x : {-0.75f,0.75f})
+    {
+        AddPlacement(decorations, flor, glm::vec3(x,0.1f,-17.7f), 1.4f);
+        AddPlacement(decorations, cempasuchil, glm::vec3(x,0.1f,-18.1f), 1.1f);
+    }
+    AddPlacement(decorations, farol, glm::vec3(-4.8f,0,-16.9f), 2.4f);
+    AddPlacement(decorations, farol, glm::vec3(4.8f,0,-16.9f), 2.4f);
+    const Placement perchedCrow = Grounded(cuervo, glm::vec3(-3.2f,0.65f,17.5f), glm::vec3(1.2f));
+    std::cout << "ESCENA: terreno 34x42, templo + 9 tumbas, " << decorations.size() << " instancias decorativas; 5 luces puntuales." << std::endl;
+
+    GLuint concreteTexture = SOIL_load_OGL_texture("images/photoreal_concrete_01-512x512_0.png",
+        SOIL_LOAD_AUTO, SOIL_CREATE_NEW_ID, SOIL_FLAG_MIPMAPS | SOIL_FLAG_INVERT_Y);
+    if (!concreteTexture)
+    {
+        std::cerr << "ERROR: no se pudo cargar la textura de concreto existente." << std::endl;
+        glfwTerminate();
+        return EXIT_FAILURE;
+    }
+    glBindTexture(GL_TEXTURE_2D, concreteTexture);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
