@@ -5,6 +5,7 @@
 #include <sstream>
 #include <iostream>
 #include <vector>
+#include <algorithm>
 
 #include <GL/glew.h>
 #include <glm/glm.hpp>
@@ -53,10 +54,11 @@ public:
         this->setupMesh();
     }
 
-    void Draw(Shader shader)
+    void Draw(Shader shader, GLuint diffuseOverride = 0)
     {
         GLuint diffuseNr = 1;
         GLuint specularNr = 1;
+        bool hasSpecular = false;
 
         for (GLuint i = 0; i < this->textures.size(); i++)
         {
@@ -72,6 +74,7 @@ public:
             }
             else if (name == "texture_specular")
             {
+                hasSpecular = true;
                 ss << specularNr++;
             }
 
@@ -88,6 +91,21 @@ public:
             glBindTexture(GL_TEXTURE_2D, this->textures[i].id);
         }
 
+        // Una textura existente puede sustituir el pasto del piso sin editar el OBJ/MTL.
+        if (diffuseOverride != 0)
+        {
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, diffuseOverride);
+            glUniform1i(glGetUniformLocation(shader.Program, "texture_diffuse1"), 0);
+        }
+
+        // Los MTL existentes documentan Kd > 1 como material luminoso.
+        // Solo ese material emite: no se agrega una luz por cada vela decorativa.
+        const float peak = (std::max)(materialColor.r, (std::max)(materialColor.g, materialColor.b));
+        const glm::vec3 emission = peak > 1.0f ? materialColor * 0.7f : glm::vec3(0.0f);
+        glUniform3fv(glGetUniformLocation(shader.Program, "emissionColor"), 1, glm::value_ptr(emission));
+        glUniform1i(glGetUniformLocation(shader.Program, "hasSpecularTexture"), hasSpecular && diffuseOverride == 0 ? 1 : 0);
+
         // Color del material (.mtl)
         glUniform3fv(
             glGetUniformLocation(shader.Program, "materialColor"),
@@ -98,7 +116,7 @@ public:
         // Bandera: 1 si tiene textura, 0 si usa solo color del .mtl
         glUniform1i(
             glGetUniformLocation(shader.Program, "hasTexture"),
-            this->textures.size() > 0 ? 1 : 0
+            (diffuseOverride != 0 || this->textures.size() > 0) ? 1 : 0
         );
 
         glUniform1f(
@@ -122,6 +140,8 @@ public:
             glActiveTexture(GL_TEXTURE0 + i);
             glBindTexture(GL_TEXTURE_2D, 0);
         }
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, 0);
     }
 
 private:
