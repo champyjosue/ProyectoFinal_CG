@@ -1,6 +1,6 @@
 // Proyecto Final / Base Practicas 8 y 9
 // Equipo 12
-// Números de cuenta: 421122006 | 320173985
+// Números de cuenta: 421122006 | 320173985 | 320028603
 
 #include <iostream>
 #include <cmath>
