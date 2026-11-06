@@ -1,6 +1,6 @@
-# ProyectoFinal_CG
+# Panteon de Mixquic v1.0 - PrototipoMixquicV1
 
-Proyecto de Computacion Grafica con OpenGL, GLEW, GLFW, GLM, Assimp y SOIL2.
+Prototipo navegable del Panteon de Mixquic con OpenGL, GLEW, GLFW, GLM, Assimp y SOIL2. Distribucion, cambios y pruebas en [MIXQUIC_V1.md](MIXQUIC_V1.md). No requiere Python; se compila y ejecuta desde Visual Studio.
 
 ## Abrir y ejecutar
 

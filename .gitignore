@@ -410,3 +410,6 @@ FodyWeavers.xsd
 
 # Modelos Wavefront: son recursos del proyecto, no objetos del compilador.
 !/ConfigInicial/Models/*.obj
+
+# Nuevos modelos originales de Blender (Wavefront OBJ).
+!/ConfigInicial/Models/BlenderV11/*.obj

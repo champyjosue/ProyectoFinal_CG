@@ -1,0 +1,63 @@
+        // ZONAS 1-4: el OBJ piso conserva su geometria, con concreto existente en vez de pasto.
+        glUniform2f(glGetUniformLocation(lightingShader.Program, "textureTiling"), 17.0f, 21.0f);
+        DrawPlacement(ground, lightingShader, concreteTexture);
+        glUniform2f(glGetUniformLocation(lightingShader.Program, "textureTiling"), 1.0f, 1.0f);
+        for (const Surface& surface : surfaces) DrawSurface(surface, VAO, lightingShader);
+        DrawPlacement(church, lightingShader);
+        // ZONA 5 y tumba principal de ZONA 6: tres instancias base reutilizadas.
+        for (const Placement& grave : graves) DrawPlacement(grave, lightingShader);
+        for (const Placement& decoration : decorations) DrawPlacement(decoration, lightingShader);
+        DrawPlacement(perchedCrow, lightingShader);
+
+        // El Sol y su animacion se conservan; la version nocturna solo presenta la Luna.
+        if (!ESCENA_NOCTURNA)
+        {
+            glm::mat4 modelSol = glm::scale(glm::translate(glm::mat4(1.0f), sunPos), glm::vec3(0.65f));
+            glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(modelSol));
+            sol.Draw(lightingShader);
+        }
+        glm::mat4 modelLuna = glm::scale(glm::translate(glm::mat4(1.0f), moonPos), glm::vec3(0.8f));
+        glUniform3f(glGetUniformLocation(lightingShader.Program, "objectGlow"), 0.35f, 0.38f, 0.48f);
+        glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(modelLuna));
+        luna.Draw(lightingShader);
+        glUniform3f(glGetUniformLocation(lightingShader.Program, "objectGlow"), 0, 0, 0);
+
+        // Los cinco emisores conservan sus modelos y sus efectos de parpadeo.
+        DrawPlacement(Grounded(fogata, posFogata, glm::vec3(ESC_FOGATA)), lightingShader);
+        DrawPlacement(Grounded(vela, posVela, glm::vec3(ESC_VELA)), lightingShader);
+        DrawPlacement(Grounded(farol, posFarol, glm::vec3(ESC_FAROL)), lightingShader);
+        DrawPlacement(Grounded(veladora, posVeladora, glm::vec3(ESC_VELADORA)), lightingShader);
+        glm::mat4 modelLuciernaga = glm::translate(glm::mat4(1.0f), posLuc);
+        modelLuciernaga = glm::rotate(modelLuciernaga, rumboLuciernaga, glm::vec3(0,1,0));
+        modelLuciernaga = glm::scale(modelLuciernaga, glm::vec3(ESC_LUCIERNAGA));
+        glUniform3f(glGetUniformLocation(lightingShader.Program, "objectGlow"), 0.08f, 0.2f, 0.02f);
+        glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(modelLuciernaga));
+        luciernaga.Draw(lightingShader);
+        glUniform3f(glGetUniformLocation(lightingShader.Program, "objectGlow"), 0,0,0);
+
+        // Vuelo y aleteo originales, trasladados al atrio: no cruzan el templo.
+        float giro = 0.5f * t;
+        float aleteo = 35.0f * sin(t * 6.0f);
+        glm::mat4 modelCuervoV(1.0f);
+        modelCuervoV = glm::translate(modelCuervoV, glm::vec3(4.6f * sin(giro), 4.8f + 0.2f * sin(t * 2.0f), 6.0f + 3.5f * cos(giro)));
+        // Tangente a la elipse (x', z') para que mire en la direccion del vuelo.
+        const float crowYaw = atan2(4.6f * cos(giro), -3.5f * sin(giro));
+        modelCuervoV = glm::rotate(modelCuervoV, crowYaw, glm::vec3(0,1,0));
+        modelCuervoV = glm::scale(modelCuervoV, glm::vec3(ESC_CUERVO));
+        glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(modelCuervoV));
+        cuervoCuerpo.Draw(lightingShader);
+        glm::mat4 modelAlaD = glm::translate(modelCuervoV, glm::vec3(0.05f,0.03f,0.02f));
+        modelAlaD = glm::rotate(modelAlaD, glm::radians(aleteo), glm::vec3(0,0,1));
+        glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(modelAlaD));
+        cuervoAlaDer.Draw(lightingShader);
+        glm::mat4 modelAlaI = glm::translate(modelCuervoV, glm::vec3(-0.05f,0.03f,0.02f));
+        modelAlaI = glm::rotate(modelAlaI, glm::radians(-aleteo), glm::vec3(0,0,1));
+        glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(modelAlaI));
+        cuervoAlaIzq.Draw(lightingShader);
+
+        // TODO: Reactivar junto con la carga de Models/Blue+Mushroom.obj.
+        // glm::mat4 modelHongo = glm::translate(glm::mat4(1.0f), glm::vec3(11,0,8));
+        // modelHongo = glm::scale(modelHongo, glm::vec3(0.15f));
+        // glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(modelHongo));
+        // hongo.Draw(lightingShader);
+
