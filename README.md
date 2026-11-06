@@ -23,9 +23,3 @@ El ejecutable y las DLL necesarias se generan en `bin/Win32/Debug/` o `bin/Win32
 - GLM: solo necesita encabezados. OpenGL se enlaza mediante `opengl32.lib` del Windows SDK.
 
 La unidad principal sigue siendo `Iluminacion.cpp`. Los demas ejemplos tienen sus propios `main` y no se deben agregar todos a la compilacion simultaneamente.
-
-## Recursos pendientes del repositorio
-
-La prueba de arranque detecto que no se incluyeron Models/TumbaTransparente.obj ni Models/Blue+Mushroom.obj. Su carga y sus bloques de dibujo en Iluminacion.cpp quedaron comentados temporalmente, con marcas TODO. Cuando esten disponibles los archivos, descomentar ambos bloques para cada modelo. piso.obj se restauro desde la copia local del curso, verificando que piso.mtl coincide por SHA-256. Estos recursos son independientes de las bibliotecas y de la compilacion.
-
-

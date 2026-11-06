@@ -50,6 +50,7 @@ Las superficies se separan en altura: piso a Y = 0, caminos a Y = 0.04, juntas a
 ## Ejecutar en Visual Studio
 
 1. Abrir `ConfigInicial.sln` desde la carpeta `PrototipoMixquicV1` del escritorio.
+1. Abrir `ConfigInicial.sln` desde la carpeta `ProyectoFinal_CG`.
 2. Seleccionar **Debug | x86**. En las propiedades del proyecto, la plataforma se llama **Win32**.
 3. Si Visual Studio ya estaba abierto, aceptar la recarga de los archivos modificados.
 4. Compilar con **Ctrl + Mayús + B** y ejecutar con **F5**.

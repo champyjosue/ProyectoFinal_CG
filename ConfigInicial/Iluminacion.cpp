@@ -1,6 +1,6 @@
 // Proyecto Final / Base Practicas 8 y 9
 // Equipo 12
-// Números de cuenta: 421122006 | 320173985
+// Números de cuenta: 421122006 | 320173985 | 320028603
 
 #include <iostream>
 #include <cmath>
@@ -432,6 +432,7 @@ int main(int argc, char** argv)
     for (Model* model : {&Piso,&sol,&luna,&flor,&tumba,&tumba2,&tumba3,&iglesia,&cuervo,&maceta,
         &macizo,&cempasuchil,&cuervoCuerpo,&cuervoAlaDer,&cuervoAlaIzq,&fogata,&vela,&luciernaga,&farol,&veladora,
         &visitanteNuevo,&arregloNuevo,&lapidaNueva})
+        &macizo,&cempasuchil,&cuervoCuerpo,&cuervoAlaDer,&cuervoAlaIzq,&fogata,&vela,&luciernaga,&farol,&veladora})
         if (!model->IsLoaded()) { glfwTerminate(); return EXIT_FAILURE; }
 
     // ETAPA 2 / ZONA 3: templo centrado por su caja real, fachada hacia +Z.
@@ -477,6 +478,8 @@ int main(int argc, char** argv)
             Model& graveModel = side == 0 && row == 0 ? lapidaNueva : *graveModels[kind];
             const float graveScale = side == 0 && row == 0 ? 1.25f : graveScales[kind];
             AddPlacement(graves, graveModel, glm::vec3(x,0.07f,graveZ[row]), graveScale, yaw);
+            const float yaw = side == 0 ? 12.0f : -12.0f;
+            AddPlacement(graves, *graveModels[kind], glm::vec3(x,0.07f,graveZ[row]), graveScales[kind], yaw);
             surfaces.push_back({ {x,0.035f,graveZ[row]}, {4.2f,0.07f,4.5f}, plotColor });
             // Conexiones cortas a los pasos laterales y acceso a cada sepultura.
             surfaces.push_back({ {side == 0 ? -8.0f : 8.0f,0.02f,graveZ[row]+2.25f}, {3.6f,0.04f,0.85f}, stone });
@@ -484,6 +487,7 @@ int main(int argc, char** argv)
     // ZONA 6: novena tumba, destacada sobre una plataforma de ofrenda.
     surfaces.push_back({ {0,0.05f,-18.45f}, {6.6f,0.1f,5.0f}, plotColor });
     AddPlacement(graves, tumba2, glm::vec3(0,0.1f,-18.9f), 0.62f, 180.0f);
+    AddPlacement(graves, tumba2, glm::vec3(0,0.1f,-18.9f), 0.62f);
     if (!ValidateLayout(church, graves))
     {
         std::cerr << "ERROR: interseccion en la distribucion arquitectonica." << std::endl;
@@ -606,6 +610,7 @@ int main(int argc, char** argv)
         {"14-visitante-blender", {-10.4f,1.4f,9.4f}, {-8.2f,1.0f,8.5f}, 24},
         {"15-arreglo-blender", {-13.7f,1.0f,10.6f}, {-12.6f,0.5f,9.25f}, 24},
         {"16-lapida-blender", {-9.0f,1.4f,11.4f}, {-10.7f,0.9f,8.0f}, 24}
+        {"13-luciernaga-t24", {7.3f,1.7f,5}, {7.8f,1.65f,2}, 24}
     };
     int captureIndex = 0;
     int resultCode = EXIT_SUCCESS;
