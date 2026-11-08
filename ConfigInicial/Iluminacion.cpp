@@ -421,6 +421,9 @@ int main(int argc, char** argv)
     Model cuervoAlaDer((char*)"Models/cuervo_ala_der.obj");
     Model cuervoAlaIzq((char*)"Models/cuervo_ala_izq.obj");
 
+    //Ofrenda
+    Model ofrenda((char*)"Models/Mixquic_Organizado.obj");
+
     // Modelos luminosos
     Model fogata((char*)"Models/fogata.obj");
     Model vela((char*)"Models/vela.obj");
@@ -794,6 +797,15 @@ int main(int argc, char** argv)
         glUniform2f(glGetUniformLocation(lightingShader.Program, "textureTiling"), 1.0f, 1.0f);
         for (const Surface& surface : surfaces) DrawSurface(surface, VAO, lightingShader);
         DrawPlacement(church, lightingShader);
+        
+        //Dibujo de Ofrenda
+        glm::mat4 modelOfrenda = glm::mat4(1.0f);
+        modelOfrenda = glm::translate(modelOfrenda, glm::vec3(0.0f, 0.1f, -18.0f));
+        modelOfrenda = glm::scale(modelOfrenda, glm::vec3(0.7f, 0.7f, 0.7f)); // <-- Cambiado de 1.5f a 0.7f
+        glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(modelOfrenda));
+        ofrenda.Draw(lightingShader);
+        
+        
         // ZONA 5 y tumba principal de ZONA 6: tres instancias base reutilizadas.
         for (const Placement& grave : graves) DrawPlacement(grave, lightingShader);
         for (const Placement& decoration : decorations) DrawPlacement(decoration, lightingShader);
