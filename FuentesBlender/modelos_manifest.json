@@ -1,0 +1,34 @@
+{
+  "blender": "5.2.3 LTS",
+  "units": "meters",
+  "axis_up": "Y (OBJ)",
+  "assets": {
+    "visitante_veladora": {
+      "triangles": 2640,
+      "dimensions_blender": [
+        0.6480000019073486,
+        0.4360000118613243,
+        1.7669999599456787
+      ],
+      "front_obj": "+Z"
+    },
+    "arreglo_cempasuchil": {
+      "triangles": 5260,
+      "dimensions_blender": [
+        0.6032813489437103,
+        0.6033318936824799,
+        0.780392287299037
+      ],
+      "front_obj": "+Z"
+    },
+    "lapida_memoria": {
+      "triangles": 4644,
+      "dimensions_blender": [
+        1.0199999809265137,
+        0.6200000047683716,
+        1.4299999475479126
+      ],
+      "front_obj": "-Z"
+    }
+  }
+}
