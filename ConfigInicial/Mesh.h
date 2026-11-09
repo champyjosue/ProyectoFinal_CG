@@ -40,16 +40,19 @@ public:
     vector<GLuint> indices;
     vector<Texture> textures;
     glm::vec3 materialColor;
+    glm::vec3 materialEmission;
 
     Mesh(vector<Vertex> vertices,
         vector<GLuint> indices,
         vector<Texture> textures,
-        glm::vec3 materialColor)
+        glm::vec3 materialColor,
+        glm::vec3 materialEmission = glm::vec3(0.0f))
     {
         this->vertices = vertices;
         this->indices = indices;
         this->textures = textures;
         this->materialColor = materialColor;
+        this->materialEmission = materialEmission;
 
         this->setupMesh();
     }
@@ -102,7 +105,9 @@ public:
         // Los MTL existentes documentan Kd > 1 como material luminoso.
         // Solo ese material emite: no se agrega una luz por cada vela decorativa.
         const float peak = (std::max)(materialColor.r, (std::max)(materialColor.g, materialColor.b));
-        const glm::vec3 emission = peak > 1.0f ? materialColor * 0.7f : glm::vec3(0.0f);
+        const bool hasEmission = glm::dot(materialEmission, materialEmission) > 0.0f;
+        const glm::vec3 emission = hasEmission ? materialEmission
+            : (peak > 1.0f ? materialColor * 0.7f : glm::vec3(0.0f));
         glUniform3fv(glGetUniformLocation(shader.Program, "emissionColor"), 1, glm::value_ptr(emission));
         glUniform1i(glGetUniformLocation(shader.Program, "hasSpecularTexture"), hasSpecular && diffuseOverride == 0 ? 1 : 0);
 

@@ -7,6 +7,7 @@
 #include <map>
 #include <vector>
 #include <limits>
+#include <algorithm>
 
 #include <GL/glew.h>
 #include <glm/glm.hpp>
@@ -26,7 +27,8 @@ GLint TextureFromFile(const char* path, string directory);
 class Model
 {
 public:
-    Model(const GLchar* path)
+    Model(const GLchar* path, bool preserveEmission = false)
+        : preserveMaterialEmission(preserveEmission)
     {
         this->loadModel(path);
     }
@@ -42,6 +44,15 @@ public:
     const glm::vec3& BoundsMin() const { return boundsMin; }
     const glm::vec3& BoundsMax() const { return boundsMax; }
     bool IsLoaded() const { return !meshes.empty(); }
+    size_t MaterialCount() const { return materialColors.size(); }
+    size_t TriangleCount() const
+    {
+        size_t total = 0;
+        for (const Mesh& mesh : meshes) total += mesh.indices.size() / 3;
+        return total;
+    }
+    const map<string, glm::vec3>& MaterialColors() const { return materialColors; }
+    const vector<Mesh>& Meshes() const { return meshes; } // Inspeccion de solo lectura para validar assets.
 
 private:
     glm::vec3 boundsMin = glm::vec3((std::numeric_limits<float>::max)());
@@ -49,6 +60,8 @@ private:
     vector<Mesh> meshes;
     string directory;
     vector<Texture> textures_loaded;
+    map<string, glm::vec3> materialColors;
+    bool preserveMaterialEmission = false;
 
     void loadModel(string path)
     {
@@ -90,6 +103,7 @@ private:
         vector<Texture> textures;
 
         glm::vec3 materialColor(1.0f, 1.0f, 1.0f);
+        glm::vec3 materialEmission(0.0f);
 
         for (GLuint i = 0; i < mesh->mNumVertices; i++)
         {
@@ -152,6 +166,18 @@ private:
                 materialColor = glm::vec3(color.r, color.g, color.b);
             }
 
+            aiString materialName;
+            material->Get(AI_MATKEY_NAME, materialName);
+            materialColors[materialName.C_Str()] = materialColor;
+
+            // Optativo para la ofrenda: los modelos anteriores conservan su comportamiento.
+            if (preserveMaterialEmission)
+            {
+                aiColor3D emission(0.0f, 0.0f, 0.0f);
+                if (AI_SUCCESS == material->Get(AI_MATKEY_COLOR_EMISSIVE, emission))
+                    materialEmission = glm::vec3(emission.r, emission.g, emission.b);
+            }
+
             // 1. Diffuse maps
             vector<Texture> diffuseMaps = this->loadMaterialTextures(material, aiTextureType_DIFFUSE, "texture_diffuse");
             textures.insert(textures.end(), diffuseMaps.begin(), diffuseMaps.end());
@@ -161,7 +187,7 @@ private:
             textures.insert(textures.end(), specularMaps.begin(), specularMaps.end());
         }
 
-        return Mesh(vertices, indices, textures, materialColor);
+        return Mesh(vertices, indices, textures, materialColor, materialEmission);
     }
 
     vector<Texture> loadMaterialTextures(aiMaterial* mat, aiTextureType type, string typeName)
@@ -204,6 +230,20 @@ GLint TextureFromFile(const char* path, string directory)
 {
     string filename = string(path);
     filename = directory + '/' + filename;
+    // Fase 3C: compartir imagenes entre modelos del mismo contexto.
+    string normalized=filename;
+    std::replace(normalized.begin(),normalized.end(),'\\','/');
+    vector<string> parts;string part;std::istringstream pathStream(normalized);
+    while(std::getline(pathStream,part,'/')){
+        if(part.empty()||part==".")continue;
+        if(part==".."&&!parts.empty()&&parts.back()!="..")parts.pop_back();
+        else parts.push_back(part);
+    }
+    normalized.clear();
+    for(const auto& entry:parts){if(!normalized.empty())normalized+='/';normalized+=entry;}
+    static map<string,GLuint> sharedImages;
+    const auto existing=sharedImages.find(normalized);
+    if(existing!=sharedImages.end())return existing->second;
     GLuint textureID;
     glGenTextures(1, &textureID);
 
@@ -216,6 +256,7 @@ GLint TextureFromFile(const char* path, string directory)
     {
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, image);
         glGenerateMipmap(GL_TEXTURE_2D);
+        sharedImages[normalized]=textureID;
     }
     else
     {

@@ -1,6 +1,6 @@
 # Panteón de Mixquic — prototipo espacial v1.0
 
-Implementado sobre la base existente de `ConfigInicial/Iluminacion.cpp`, con C++, OpenGL 3.3, GLFW, GLEW, GLM, Assimp y SOIL2 ya incluidos. Fecha: 19 de octubre de 2026.
+Implementado sobre la base existente de `ConfigInicial/Iluminacion.cpp` (actualmente `ConfigInicial/Mixquic.cpp`), con C++, OpenGL 3.3, GLFW, GLEW, GLM, Assimp y SOIL2 ya incluidos. Fecha: 19 de octubre de 2026.
 
 ## Cambios realizados
 
@@ -38,7 +38,7 @@ Las superficies se separan en altura: piso a Y = 0, caminos a Y = 0.04, juntas a
 
 | Archivo | Cambio |
 |---|---|
-| `ConfigInicial/Iluminacion.cpp` | Distribución por zonas, instancias reutilizadas, geometría simple, luces, trayectorias, cámara inicial y modo de validación |
+| `ConfigInicial/Mixquic.cpp` (denominado `Iluminacion.cpp` en V1.0) | Distribución por zonas, instancias reutilizadas, geometría simple, luces, trayectorias, cámara inicial y modo de validación |
 | `ConfigInicial/Model.h` | Consulta de límites reales, carga comprobable, parámetro de textura opcional y comprobación correcta de flags de Assimp |
 | `ConfigInicial/Mesh.h` | Textura opcional para el piso, emisión de materiales existentes y uso seguro del mapa especular |
 | `ConfigInicial/Camera.h` | Modo peatonal opcional; los demás ejercicios conservan por defecto su cámara libre |

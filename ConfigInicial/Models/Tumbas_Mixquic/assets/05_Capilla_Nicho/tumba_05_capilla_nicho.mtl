@@ -1,0 +1,81 @@
+# Biblioteca Tumbas Mixquic: opaque diffuse materials, optional Ke/Pr/Pm
+
+newmtl MXT_Cantera_Clara
+Ka 0.04 0.04 0.04
+Kd 0.680000007 0.639999986 0.540000021
+Ks 0.120000 0.120000 0.120000
+Ns 2.000000
+d 1
+Ni 1.45
+illum 2
+Pr 0.800000
+Pm 0.000000
+map_Kd ../../texturas/cantera_envejecida.png
+
+newmtl MXT_Granito_Gris
+Ka 0.04 0.04 0.04
+Kd 0.419999987 0.419999987 0.430000007
+Ks 0.120000 0.120000 0.120000
+Ns 2.000000
+d 1
+Ni 1.45
+illum 2
+Pr 0.800000
+Pm 0.000000
+map_Kd ../../texturas/granito_gris.png
+
+newmtl MXT_Piedra_Volcanica
+Ka 0.04 0.04 0.04
+Kd 0.310000002 0.300000012 0.280000001
+Ks 0.120000 0.120000 0.120000
+Ns 2.000000
+d 1
+Ni 1.45
+illum 2
+Pr 0.800000
+Pm 0.000000
+map_Kd ../../texturas/piedra_volcanica.png
+
+newmtl MXT_Mortero_Envejecido
+Ka 0.04 0.04 0.04
+Kd 0.170000002 0.159999996 0.140000001
+Ks 0.120000 0.120000 0.120000
+Ns 2.000000
+d 1
+Ni 1.45
+illum 2
+Pr 0.800000
+Pm 0.000000
+
+newmtl MXT_Hierro_Patinado
+Ka 0.04 0.04 0.04
+Kd 0.0350000001 0.0419999994 0.0399999991
+Ks 0.450000 0.450000 0.450000
+Ns 4.611570
+d 1
+Ni 1.45
+illum 2
+Pr 0.550000
+Pm 0.550000
+
+newmtl MXT_Bronce_Antiguo
+Ka 0.04 0.04 0.04
+Kd 0.280000001 0.159999996 0.0549999997
+Ks 0.450000 0.450000 0.450000
+Ns 6.680556
+d 1
+Ni 1.45
+illum 2
+Pr 0.480000
+Pm 0.650000
+
+newmtl MXT_Terracota
+Ka 0.04 0.04 0.04
+Kd 0.300000012 0.104999997 0.0549999997
+Ks 0.120000 0.120000 0.120000
+Ns 2.000000
+d 1
+Ni 1.45
+illum 2
+Pr 0.800000
+Pm 0.000000

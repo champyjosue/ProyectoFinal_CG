@@ -7,6 +7,9 @@
 #include <string>
 #include <algorithm>
 #include <vector>
+#include <set>
+#include <chrono>
+#include <iomanip>
 
 // GLEW
 #include <GL/glew.h>
@@ -43,6 +46,17 @@ GLfloat lastX = WIDTH / 2.0f;
 GLfloat lastY = HEIGHT / 2.0f;
 bool keys[1024];
 bool firstMouse = true;
+// Fase 2B: V2 experimental por defecto; F2 o --iglesia=v1 permiten volver a V1.
+bool useIglesiaV2 = true;
+// Fase 3A: la ofrenda anterior permanece disponible con --ofrenda=v1.
+bool useOfrendaV2 = true;
+// Fase 3C: comparacion reversible al iniciar.
+bool useNewLayout = true;
+const char* ChurchWindowTitle()
+{
+    return useIglesiaV2 ? "Panteon de Mixquic - Iglesia V2 experimental [F2: V1]"
+        : "Panteon de Mixquic - Iglesia V1 [F2: V2]";
+}
 
 // Deltatime
 GLfloat deltaTime = 0.0f;
@@ -235,7 +249,7 @@ bool OverlapXZ(const Bounds& a, const Bounds& b)
 
 bool ValidateLayout(const Placement& church, const std::vector<Placement>& graves)
 {
-    if (graves.size() != 9) return false;
+    if (graves.size() != (useNewLayout ? 14u : 9u)) return false;
     const Bounds centralPath = { glm::vec3(-2.0f, 0.0f, -2.6f), glm::vec3(2.0f, 1.0f, 19.0f) };
     for (size_t i = 0; i < graves.size(); ++i)
     {
@@ -259,7 +273,7 @@ bool ValidateLayout(const Placement& church, const std::vector<Placement>& grave
             if (OverlapXZ(pedestrian, c)) return false;
             for (const Placement& grave : graves) if (OverlapXZ(pedestrian, grave.bounds)) return false;
         }
-    std::cout << "VALIDACION: 9 tumbas (4 izquierda, 4 derecha, 1 altar), sin cruces; recorrido central y lateral libre." << std::endl;
+    std::cout << "VALIDACION: " << graves.size() << " tumbas; sin cruces; recorrido central y lateral libre." << std::endl;
     std::cout << "TEMPLO: X [" << c.min.x << ", " << c.max.x << "], Z [" << c.min.z << ", " << c.max.z << "], altura " << c.max.y << std::endl;
     return true;
 }
@@ -328,14 +342,334 @@ bool ValidateAnimationPaths(const Placement& church, const std::vector<Placement
     return true;
 }
 
+// Fase 1: comprobar la nueva ofrenda sin sustituir las validaciones de V1.0.
+bool ValidateOfrenda(const Model& model, const Placement& altar,
+    const std::vector<Placement>& graves, const std::vector<Placement>& decorations, bool logMaterials)
+{
+    const size_t expectedTriangles = useOfrendaV2 ? 81455u : 53553u;
+    if (model.TriangleCount() != expectedTriangles || model.MaterialCount() != 18)
+    { std::cerr << "ERROR: geometria o materiales inesperados en la ofrenda." << std::endl; return false; }
+    const glm::vec3 expectedSize = useOfrendaV2 ? glm::vec3(6.48f,6.0f,4.9f) : glm::vec3(5.7f,3.82f,4.8f);
+    if (glm::length(model.BoundsMax()-model.BoundsMin()-expectedSize)>0.002f)
+    { std::cerr << "ERROR: dimensiones/ejes de la ofrenda." << std::endl; return false; }
+    const Bounds& b = altar.bounds;
+    if (fabs(b.min.y-0.1f)>0.002f || b.min.x < -3.3f || b.max.x > 3.3f
+        || b.min.z < -20.95f || b.max.z > -15.95f || b.max.y <= b.min.y)
+    { std::cerr << "ERROR: la ofrenda no esta apoyada dentro de la plataforma." << std::endl; return false; }
+    for (const Placement& grave : graves)
+        if (OverlapXZ(b,grave.bounds))
+        { std::cerr << "ERROR: la ofrenda intersecta una tumba." << std::endl; return false; }
+    for (const Placement& decoration : decorations)
+        if (OverlapXZ(b,decoration.bounds))
+        { std::cerr << "ERROR: la ofrenda intersecta una decoracion." << std::endl; return false; }
+    // Recorrido posterior y enlaces laterales, con el mismo margen peatonal de la escena.
+    const glm::vec2 route[] = {{6.2f,-1.6f},{6.2f,-15.3f},{0,-15.3f},{-6.2f,-15.3f},{-6.2f,-1.6f}};
+    for (size_t i=1;i<sizeof(route)/sizeof(route[0]);++i)
+        for (int step=0;step<=100;++step)
+        {
+            const glm::vec2 p = glm::mix(route[i-1],route[i],step/100.0f);
+            const Bounds pedestrian = {glm::vec3(p.x-.35f,0,p.y-.35f),glm::vec3(p.x+.35f,EYE_HEIGHT,p.y+.35f)};
+            if (OverlapXZ(b,pedestrian)) return false;
+        }
+    bool hasEmission=false;
+    for (const Mesh& mesh : model.Meshes())
+    {
+        hasEmission = hasEmission || glm::dot(mesh.materialEmission,mesh.materialEmission)>0;
+        for (const Vertex& v : mesh.vertices)
+            if (!std::isfinite(v.TexCoords.x) || !std::isfinite(v.TexCoords.y)
+                || !std::isfinite(v.Normal.x) || !std::isfinite(v.Normal.y)
+                || !std::isfinite(v.Normal.z) || fabs(glm::length(v.Normal)-1.0f)>0.02f) return false;
+    }
+    if (!hasEmission) return false;
+    std::cout << "OFRENDA: V" << (useOfrendaV2 ? 2 : 1) << ", " << model.TriangleCount()
+        << " triangulos, 18 materiales; Y arriba; base Y=" << b.min.y
+        << "; X [" << b.min.x << ", " << b.max.x << "], Z [" << b.min.z << ", " << b.max.z
+        << "], altura=" << b.max.y-b.min.y << "; UV/normales/emision validas; recorrido libre." << std::endl;
+    if (logMaterials)
+        for (const auto& entry : model.MaterialColors())
+            std::cout << "MATERIAL_OFRENDA " << entry.first << " " << entry.second.r << " "
+                << entry.second.g << " " << entry.second.b << std::endl;
+    return true;
+}
+
+// Fase 2B: comprobar recursos reales de la GPU y asignaciones del OBJ aprobado.
+bool ValidateChurchV2(const Model& model, const Placement& church)
+{
+    if (model.TriangleCount() != 45000 || model.MaterialCount() != 12)
+    { std::cerr << "ERROR: Iglesia V2 debe tener 45000 triangulos y 12 materiales." << std::endl; return false; }
+    if (glm::length(church.bounds.min - glm::vec3(-4.48f,0,-13.715f)) > 0.002f
+        || glm::length(church.bounds.max - glm::vec3(4.48f,8.52f,-3.285f)) > 0.002f)
+    { std::cerr << "ERROR: escala, orientacion o posicion de Iglesia V2." << std::endl; return false; }
+    const std::map<std::string, size_t> expectedTriangles = {
+        {"V2_Piedra_Volcanica",1464}, {"V2_Cantera_Envejecida",21936},
+        {"V2_Aplanado_Envejecido",6748}, {"V2_Huecos",1760},
+        {"V2_Madera_Puerta",1024}, {"V2_Bronce_Oscuro",1944},
+        {"V2_Cristal_Oscuro",508}, {"V2_Hierro_Forjado",2876},
+        {"V2_Mortero",740}, {"V2_Ventanas_Ambar",1232},
+        {"V2_Cubierta_Plomiza",4416}, {"V2_Teja_Envejecida",352}
+    };
+    const std::map<std::string, std::string> expectedMaps = {
+        {"V2_Piedra_Volcanica","textures/piedra_volcanica.png"},
+        {"V2_Cantera_Envejecida","textures/cantera_envejecida.png"},
+        {"V2_Aplanado_Envejecido","textures/aplanado_envejecido.png"},
+        {"V2_Madera_Puerta","textures/madera_puerta.png"}
+    };
+    std::map<std::string, size_t> materialTriangles;
+    std::map<std::string, GLuint> diffuseTextures;
+    bool nonzeroUV = false, warmEmission = false;
+    for (const Mesh& mesh : model.Meshes())
+    {
+        std::string name;
+        // Los 12 colores Kd del asset son distintos; identifican cada submalla.
+        for (const auto& entry : model.MaterialColors())
+            if (glm::length(entry.second-mesh.materialColor) < 0.00001f) name = entry.first;
+        if (name.empty() || expectedTriangles.find(name) == expectedTriangles.end()) return false;
+        materialTriangles[name] += mesh.indices.size()/3;
+        size_t diffuseCount = 0;
+        for (const Texture& texture : mesh.textures)
+        {
+            if (texture.type != "texture_diffuse") continue;
+            ++diffuseCount;
+            std::string path = texture.path.C_Str();
+            std::replace(path.begin(),path.end(),'\\','/');
+            const auto expected = expectedMaps.find(name);
+            if (expected == expectedMaps.end() || expected->second != path) return false;
+            diffuseTextures[path] = texture.id;
+        }
+        if (diffuseCount != (expectedMaps.count(name) ? 1u : 0u)) return false;
+        for (const Vertex& vertex : mesh.vertices)
+        {
+            if (!std::isfinite(vertex.TexCoords.x) || !std::isfinite(vertex.TexCoords.y)
+                || !std::isfinite(vertex.Normal.x) || !std::isfinite(vertex.Normal.y)
+                || !std::isfinite(vertex.Normal.z) || fabs(glm::length(vertex.Normal)-1.0f)>0.02f) return false;
+            nonzeroUV = nonzeroUV || glm::dot(vertex.TexCoords,vertex.TexCoords)>0.0001f;
+        }
+        if (name == "V2_Ventanas_Ambar")
+        {
+            if (glm::length(mesh.materialEmission-glm::vec3(0.936f,0.348f,0.078f))>0.001f) return false;
+            warmEmission = true;
+        }
+    }
+    if (materialTriangles != expectedTriangles || diffuseTextures.size()!=4 || !nonzeroUV || !warmEmission) return false;
+    GLint previousTexture = 0;
+    glGetIntegerv(GL_TEXTURE_BINDING_2D,&previousTexture);
+    for (const auto& entry : diffuseTextures)
+    {
+        if (!glIsTexture(entry.second)) return false;
+        glBindTexture(GL_TEXTURE_2D,entry.second);
+        GLint width=0,height=0,mipWidth=0;
+        glGetTexLevelParameteriv(GL_TEXTURE_2D,0,GL_TEXTURE_WIDTH,&width);
+        glGetTexLevelParameteriv(GL_TEXTURE_2D,0,GL_TEXTURE_HEIGHT,&height);
+        glGetTexLevelParameteriv(GL_TEXTURE_2D,1,GL_TEXTURE_WIDTH,&mipWidth);
+        glBindTexture(GL_TEXTURE_2D,static_cast<GLuint>(previousTexture));
+        if (width!=1024 || height!=1024 || mipWidth!=512) return false;
+        std::cout << "TEXTURA_IGLESIA_V2 " << entry.first << " " << width << "x" << height << " mip1=" << mipWidth << std::endl;
+    }
+    for (const auto& entry : model.MaterialColors())
+        std::cout << "MATERIAL_IGLESIA_V2 " << entry.first << " triangulos=" << materialTriangles[entry.first]
+            << " Kd=" << entry.second.r << "," << entry.second.g << "," << entry.second.b << std::endl;
+    std::cout << "IGLESIA_V2: 45000 triangulos, 12 materiales, 4 PNG cargados en GPU; UV y normales validas; Ke ambar=0.936,0.348,0.078." << std::endl;
+    return true;
+}
+
+
+// Fase 3C: decoracion apoyada exclusivamente en regiones planas comprobadas.
+struct GraveSpec { int kind; glm::vec3 position; float scale, yaw; char category; };
+struct AttachedProp { Placement item; size_t owner; Bounds patch; float supportY; };
+
+bool ClearGroundProp(const Placement& item, const Placement& church, const Placement& altar,
+    const std::vector<Placement>& graves, const std::vector<Placement>& props)
+{
+    const Bounds& b=item.bounds;
+    if(b.min.x < -16.9f || b.max.x > 16.9f || b.min.z < -21 || b.max.z > 21
+        || OverlapXZ(b,church.bounds) || OverlapXZ(b,altar.bounds)) return false;
+    for(const auto& g:graves) if(OverlapXZ(b,g.bounds)) return false;
+    for(const auto& g:props) if(OverlapXZ(b,g.bounds)) return false;
+    for(float x : {-16.45f,16.45f}) {
+        Bounds route={glm::vec3(x-.35f,0,-13),glm::vec3(x+.35f,EYE_HEIGHT,12)};
+        if(OverlapXZ(b,route)) return false;
+    }
+    const glm::vec2 route[]={{0,19},{0,12},{0,-1.6f},{6.2f,-1.6f},{6.2f,-15.3f},
+        {0,-15.3f},{-6.2f,-15.3f},{-6.2f,-1.6f},{0,-1.6f}};
+    for(size_t i=1;i<sizeof(route)/sizeof(route[0]);++i)for(int step=0;step<=100;++step){
+        glm::vec2 q=glm::mix(route[i-1],route[i],step/100.0f);
+        Bounds walk={glm::vec3(q.x-.35f,0,q.y-.35f),glm::vec3(q.x+.35f,EYE_HEIGHT,q.y+.35f)};
+        if(OverlapXZ(b,walk))return false;
+    }
+    return true;
+}
+
+
+
+float GroundSupportY(const Bounds& b,const std::vector<Surface>& surfaces)
+{
+    float common=-1;
+    for(int x=0;x<3;++x)for(int z=0;z<3;++z){
+        float px=b.min.x+(b.max.x-b.min.x)*x*.5f,pz=b.min.z+(b.max.z-b.min.z)*z*.5f,y=0;
+        for(const auto& surface:surfaces)if(px>=surface.center.x-surface.size.x*.5f
+            &&px<=surface.center.x+surface.size.x*.5f&&pz>=surface.center.z-surface.size.z*.5f
+            &&pz<=surface.center.z+surface.size.z*.5f)
+            y=(std::max)(y,surface.center.y+surface.size.y*.5f);
+        if(common<0)common=y;else if(fabs(common-y)>.001f)return -1;
+    }
+    return common;
+}
+
+float TopSurfaceY(const Model& model,float x,float z)
+{
+    float best=-1.0e10f;
+    for(const Mesh& mesh:model.Meshes())for(size_t i=0;i+2<mesh.indices.size();i+=3){
+        const glm::vec3 a=mesh.vertices[mesh.indices[i]].Position,b=mesh.vertices[mesh.indices[i+1]].Position,
+            c=mesh.vertices[mesh.indices[i+2]].Position;
+        const float det=(b.z-c.z)*(a.x-c.x)+(c.x-b.x)*(a.z-c.z);
+        if(fabs(det)<1.0e-9f)continue;
+        const float u=((b.z-c.z)*(x-c.x)+(c.x-b.x)*(z-c.z))/det;
+        const float v=((c.z-a.z)*(x-c.x)+(a.x-c.x)*(z-c.z))/det;
+        if(u>=-.00001f&&v>=-.00001f&&u+v<=1.00001f)
+            best=(std::max)(best,u*a.y+v*b.y+(1-u-v)*c.y);
+    }
+    return best;
+}
+bool SupportedOnMesh(const Model& model,const Bounds& local,float y)
+{
+    for(int x=0;x<3;++x)for(int z=0;z<3;++z){
+        const float px=local.min.x+(local.max.x-local.min.x)*x*.5f;
+        const float pz=local.min.z+(local.max.z-local.min.z)*z*.5f;
+        if(fabs(TopSurfaceY(model,px,pz)-y)>.002f)return false;
+    }
+    return true;
+}
+
+bool ValidateAttached(const std::vector<AttachedProp>& props, const std::vector<Placement>& graves,
+    const Placement& church, const Placement& altar)
+{
+    for(size_t i=0;i<props.size();++i){
+        const auto& prop=props[i]; if(prop.owner>=graves.size())return false;
+        const glm::mat4 local=glm::inverse(graves[prop.owner].matrix)*prop.item.matrix;
+        const Bounds b=WorldBounds(*prop.item.model,local);
+        if(!SupportedOnMesh(*graves[prop.owner].model,b,prop.supportY))return false;
+        if(fabs(b.min.y-prop.supportY)>.002f || b.min.x<prop.patch.min.x-.001f
+            || b.max.x>prop.patch.max.x+.001f || b.min.z<prop.patch.min.z-.001f
+            || b.max.z>prop.patch.max.z+.001f) {
+            std::cerr<<"ERROR: apoyo o contencion de adorno "<<i<<std::endl;return false;
+        }
+        if(OverlapXZ(prop.item.bounds,church.bounds)||OverlapXZ(prop.item.bounds,altar.bounds))return false;
+        for(size_t j=0;j<graves.size();++j)if(j!=prop.owner&&OverlapXZ(prop.item.bounds,graves[j].bounds))return false;
+        for(size_t j=i+1;j<props.size();++j)if(OverlapXZ(prop.item.bounds,props[j].item.bounds))return false;
+    }
+    std::cout<<"VALIDACION: "<<props.size()<<" adornos sobre tapas planas, apoyo y contencion local comprobados."<<std::endl;
+    return true;
+}
+
+bool ValidateGraveLibrary(const std::vector<Model*>& models)
+{
+    const size_t tri[]={976,908,608,606,2308,3520,3654}, mats[]={5,7,5,5,7,6,10};
+    const glm::vec3 dims[]={{1.2f,1.55f,2.2f},{1.25f,2.55f,2.3f},{1.5f,.698f,2.45f},
+        {1.55f,1.95f,2.45f},{1.65f,2.85f,2.4f},{1.95f,2.34f,2.55f},{1.5f,1.65f,2.35f}};
+    std::set<GLuint> images;std::set<std::string> names;
+    for(size_t i=0;i<models.size();++i){
+        const Model& model=*models[i];bool uv=false;std::set<std::string> maps;
+        std::cout<<"INSPECCION_TUMBA "<<i+1<<" tri="<<model.TriangleCount()<<" mats="<<model.MaterialCount()<<" minY="<<model.BoundsMin().y<<" dims="<<(model.BoundsMax()-model.BoundsMin()).x<<","<<(model.BoundsMax()-model.BoundsMin()).y<<","<<(model.BoundsMax()-model.BoundsMin()).z<<std::endl;
+        if(!model.IsLoaded()||model.TriangleCount()!=tri[i]||model.MaterialCount()!=mats[i]
+            ||glm::length(model.BoundsMax()-model.BoundsMin()-dims[i])>.002f
+            ||fabs(model.BoundsMin().y)>.001f)return false;
+        for(const auto& entry:model.MaterialColors())names.insert(entry.first);
+        for(const Mesh& mesh:model.Meshes()){
+            if(mesh.indices.empty() || mesh.indices.size()%3)return false;
+            for(const Vertex& v:mesh.vertices){
+                if(!std::isfinite(v.TexCoords.x)||!std::isfinite(v.TexCoords.y)
+                    ||!std::isfinite(v.Normal.x)||!std::isfinite(v.Normal.y)||!std::isfinite(v.Normal.z)
+                    ||fabs(glm::length(v.Normal)-1)>.02f)return false;
+                uv=uv||glm::dot(v.TexCoords,v.TexCoords)>.00001f;
+            }
+            for(const auto& texture:mesh.textures)if(texture.type=="texture_diffuse"){
+                images.insert(texture.id);
+                std::string path=texture.path.C_Str();
+                maps.insert(path);
+                if(path.find("../../texturas/")!=0){std::cerr<<"ERROR: ruta textura "<<path<<std::endl;return false;}
+                glBindTexture(GL_TEXTURE_2D,texture.id);GLint w=0,h=0,mip=0;
+                glGetTexLevelParameteriv(GL_TEXTURE_2D,0,GL_TEXTURE_WIDTH,&w);
+                glGetTexLevelParameteriv(GL_TEXTURE_2D,0,GL_TEXTURE_HEIGHT,&h);
+                glGetTexLevelParameteriv(GL_TEXTURE_2D,1,GL_TEXTURE_WIDTH,&mip);
+                if(w!=1024||h!=1024||mip!=512){std::cerr<<"ERROR: textura GPU "<<path<<" "<<w<<","<<h<<","<<mip<<std::endl;return false;}
+            }
+        }
+        if(!uv||maps.size()!=3){std::cerr<<"ERROR: UV/maps "<<uv<<","<<maps.size()<<std::endl;return false;}
+        std::cout<<"TUMBA_ASSET "<<i+1<<" triangulos="<<tri[i]<<" materiales="<<mats[i]
+            <<" dimensiones_XYZ="<<dims[i].x<<","<<dims[i].y<<","<<dims[i].z<<"; UV/normales/3PNG GPU OK"<<std::endl;
+    }
+    glBindTexture(GL_TEXTURE_2D,0);
+    if(images.size()!=3){std::cerr<<"ERROR: imagenes compartidas "<<images.size()<<std::endl;return false;}
+    std::cout<<"BIBLIOTECA: 7 modelos, 12580 triangulos unicos, "<<names.size()
+        <<" materiales distintos, 3 PNG compartidos en GPU; Y arriba, frente +Z."<<std::endl;
+    return true;
+}
+
+
+bool ValidateOuterAccess(const Placement& church,const Placement& altar,
+    const std::vector<Placement>& graves,const std::vector<Placement>& props)
+{
+    if(!useNewLayout)return true;
+    for(float side:{-1.0f,1.0f}){
+        const glm::vec2 route[]={{side*6.2f,12},{side*16.45f,12},{side*16.45f,-13},{side*6.2f,-13}};
+        for(size_t i=1;i<4;++i)for(int step=0;step<=200;++step){
+            const glm::vec2 p=glm::mix(route[i-1],route[i],step/200.0f);
+            Bounds walk={glm::vec3(p.x-.35f,0,p.y-.35f),glm::vec3(p.x+.35f,EYE_HEIGHT,p.y+.35f)};
+            if(OverlapXZ(walk,church.bounds)||OverlapXZ(walk,altar.bounds))return false;
+            for(const auto& g:graves)if(OverlapXZ(walk,g.bounds))return false;
+            for(const auto& prop:props)if(OverlapXZ(walk,prop.bounds))return false;
+        }
+    }
+    std::cout<<"VALIDACION: acceso a franjas secundarias desde atrio y vuelta por laterales; margen 0.35."<<std::endl;
+    return true;
+}
+
+void SceneBudget(const std::vector<Model*>& loaded, const std::vector<Placement>& drawn,
+    size_t surfaceCount)
+{
+    size_t triangles=surfaceCount*12;std::map<Model*,size_t> instances;size_t uniqueTri=0;
+    std::set<std::string> materials;
+    for(const auto& item:drawn){triangles+=item.model->TriangleCount();++instances[item.model];}
+    for(const auto& entry:instances){
+        uniqueTri+=entry.first->TriangleCount();
+        for(const auto& m:entry.first->MaterialColors())materials.insert(m.first);
+        std::cout<<"MODELO_EN_USO indice_carga="<<std::distance(loaded.begin(),std::find(loaded.begin(),loaded.end(),entry.first))
+            <<" instancias="<<entry.second<<" triangulos_asset="<<entry.first->TriangleCount()<<std::endl;
+    }
+    std::cout<<"PRESUPUESTO: modelos_cargados="<<loaded.size()<<" modelos_dibujados="<<instances.size()
+        <<" instancias_modelos="<<drawn.size()<<" superficies="<<surfaceCount
+        <<" triangulos_unicos_dibujados="<<uniqueTri<<" triangulos_por_cuadro="<<triangles
+        <<" nombres_materiales_en_uso="<<materials.size()<<std::endl;
+}
+
 // TODO v1.1: acceso arquitectonico, bardas perimetrales, arboles y vegetacion.
 // TODO v1.1: personajes, ofrendas adicionales, sahumerios y humo.
 // TODO v1.1: objetos interactivos y audio ambiental.
 
 int main(int argc, char** argv)
 {
-    const bool validate = argc == 3 && std::string(argv[1]) == "--validar-escena";
-    const std::string captureDirectory = validate ? argv[2] : "";
+    bool validate = false;
+    bool benchmark = false;
+    std::string captureDirectory;
+    for (int i=1; i<argc; ++i)
+    {
+        const std::string argument = argv[i];
+        if (argument == "--iglesia=v1") useIglesiaV2 = false;
+        else if (argument == "--iglesia=v2") useIglesiaV2 = true;
+        else if (argument == "--ofrenda=v1") useOfrendaV2 = false;
+        else if (argument == "--ofrenda=v2") useOfrendaV2 = true;
+        else if (argument == "--distribucion=anterior") useNewLayout = false;
+        else if (argument == "--distribucion=nueva") useNewLayout = true;
+        else if (argument == "--medir-fps" && !validate && i+1<argc)
+        { validate=true; benchmark=true; captureDirectory=argv[++i]; }
+        else if (argument == "--validar-escena" && !validate && i+1<argc)
+        { validate=true; captureDirectory=argv[++i]; }
+        else
+        {
+            std::cerr << "Uso: ConfigInicial.exe [--iglesia=v1|--iglesia=v2] [--ofrenda=v1|--ofrenda=v2] [--distribucion=anterior|nueva] [--validar-escena carpeta_existente | --medir-fps carpeta_existente]" << std::endl;
+            return EXIT_FAILURE;
+        }
+    }
     camera.SetWalkingMode(EYE_HEIGHT, 3.5f);
 
     // Init GLFW
@@ -351,7 +685,7 @@ int main(int argc, char** argv)
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
     glfwWindowHint(GLFW_RESIZABLE, GL_FALSE);
 
-    GLFWwindow* window = glfwCreateWindow(WIDTH, HEIGHT, "Panteon de Mixquic v1.0 - Equipo 12", nullptr, nullptr);
+    GLFWwindow* window = glfwCreateWindow(WIDTH, HEIGHT, ChurchWindowTitle(), nullptr, nullptr);
 
     if (nullptr == window)
     {
@@ -408,7 +742,8 @@ int main(int argc, char** argv)
     Model tumba2((char*)"Models/Tumba2.obj");
     Model tumba3((char*)"Models/Tumba3.obj");
     // otros modelos para decorar panteon
-    Model iglesia((char*)"Models/iglesia.obj"); 
+    Model iglesia((char*)"Models/iglesia.obj"); // V1 se conserva intacta.
+    Model iglesiaV2("Models/Iglesia_Mixquic_V2/iglesia_mixquic_v2.obj", true);
     Model cuervo((char*)"Models/cuervo.obj");
     Model maceta((char*)"Models/maceta_cempasuchil.obj");
     Model macizo((char*)"Models/cempasuchil_macizo.obj");
@@ -423,16 +758,42 @@ int main(int argc, char** argv)
     Model luciernaga((char*)"Models/luciernaga.obj");
     Model farol((char*)"Models/farol.obj");
     Model veladora((char*)"Models/veladora.obj");
+    // Exportada desde Blender a Y-arriba, sin cambiar el archivo .blend.
+    Model ofrenda(useOfrendaV2 ? "Models/Ofrenda_Mixquic_V2/ofrenda_mixquic_v2.obj" : "Models/ofrenda.obj", true);
+
+
+    // Biblioteca: carga unica por variante, instancias mediante matrices.
+    Model graveV1("Models/Tumbas_Mixquic/assets/01_Lapida_Simple/tumba_01_lapida_simple.obj", true);
+    Model graveV2("Models/Tumbas_Mixquic/assets/02_Cruz_Alta/tumba_02_cruz_alta.obj", true);
+    Model graveV3("Models/Tumbas_Mixquic/assets/03_Sepulcro_Bajo/tumba_03_sepulcro_bajo.obj", true);
+    Model graveV4("Models/Tumbas_Mixquic/assets/04_Base_Escalonada/tumba_04_base_escalonada.obj", true);
+    Model graveV5("Models/Tumbas_Mixquic/assets/05_Capilla_Nicho/tumba_05_capilla_nicho.obj", true);
+    Model graveV6("Models/Tumbas_Mixquic/assets/06_Familiar_Ornamentada/tumba_06_familiar_ornamentada.obj", true);
+    Model graveV7("Models/Tumbas_Mixquic/assets/07_Ofrenda_Decorativa/tumba_07_ofrenda_decorativa.obj", true);
+    Model lightPot("Models/Decoracion_Mixquic_3C/maceta_ligera.obj");
+    Model petals("Models/Decoracion_Mixquic_3C/petalos_camino.obj");
+    const std::vector<Model*> library={&graveV1,&graveV2,&graveV3,&graveV4,&graveV5,&graveV6,&graveV7};
+    if(!ValidateGraveLibrary(library)||!lightPot.IsLoaded()||!petals.IsLoaded()){
+        std::cerr<<"ERROR: biblioteca Fase 3C."<<std::endl;glfwTerminate();return EXIT_FAILURE;
+    }
 
     // La validacion impide aceptar un prototipo con recursos faltantes.
-    for (Model* model : {&Piso,&sol,&luna,&flor,&tumba,&tumba2,&tumba3,&iglesia,&cuervo,&maceta,
-        &macizo,&cempasuchil,&cuervoCuerpo,&cuervoAlaDer,&cuervoAlaIzq,&fogata,&vela,&luciernaga,&farol,&veladora})
+    for (Model* model : {&Piso,&sol,&luna,&flor,&tumba,&tumba2,&tumba3,&iglesia,&iglesiaV2,&cuervo,&maceta,
+        &macizo,&cempasuchil,&cuervoCuerpo,&cuervoAlaDer,&cuervoAlaIzq,&fogata,&vela,&luciernaga,&farol,&veladora,&ofrenda})
         if (!model->IsLoaded()) { glfwTerminate(); return EXIT_FAILURE; }
 
     // ETAPA 2 / ZONA 3: templo centrado por su caja real, fachada hacia +Z.
     // Planta final X [-4.48,4.48], Z [-13.715,-3.285]; altura 8.5225.
-    const Placement church = Grounded(iglesia, glm::vec3(0, GROUND_Y, -8.5f), glm::vec3(0.7f));
+    const Placement churchV1 = Grounded(iglesia, glm::vec3(0, GROUND_Y, -8.5f), glm::vec3(0.7f));
+    // V2 ya esta exportada a escala final y Y-arriba: no reducirla de nuevo.
+    const Placement churchV2 = Grounded(iglesiaV2, glm::vec3(0, GROUND_Y, -8.5f), glm::vec3(1.0f));
+    const Placement& church = useIglesiaV2 ? churchV2 : churchV1;
+    if (!ValidateChurchV2(iglesiaV2,churchV2))
+    { std::cerr << "ERROR: recursos o transformacion de Iglesia V2." << std::endl; glfwTerminate(); return EXIT_FAILURE; }
+    std::cout << "IGLESIA_ACTIVA: " << (useIglesiaV2 ? "V2 escala=1" : "V1 escala=0.7")
+        << "; posicion=(0,0,-8.5); fachada=+Z; F2 alterna sin superponer." << std::endl;
     const Placement ground = Grounded(Piso, glm::vec3(0, GROUND_Y, 0), glm::vec3(6.8f, 1.0f, 8.4f));
+    const Placement altar = Grounded(ofrenda, glm::vec3(-0.8f, 0.1f, -19.25f), glm::vec3(0.5f));
     std::vector<Surface> surfaces;
     const glm::vec3 stone(0.46f, 0.42f, 0.35f);
     const glm::vec3 border(0.22f, 0.20f, 0.17f);
@@ -461,6 +822,7 @@ int main(int argc, char** argv)
     Model* graveModels[] = { &tumba, &tumba2, &tumba3 };
     const float graveScales[] = { 0.67f, 0.53f, 0.65f };
     const float graveZ[] = { 8.0f, 2.0f, -4.0f, -10.0f };
+    if (!useNewLayout)
     for (int side = 0; side < 2; ++side)
         for (int row = 0; row < 4; ++row)
         {
@@ -472,9 +834,38 @@ int main(int argc, char** argv)
             // Conexiones cortas a los pasos laterales y acceso a cada sepultura.
             surfaces.push_back({ {side == 0 ? -8.0f : 8.0f,0.02f,graveZ[row]+2.25f}, {3.6f,0.04f,0.85f}, stone });
         }
+
+    const GraveSpec specs[]={
+        {0,{-10.5f,.07f,8.6f},1.05f,8,'A'},
+        {3,{-10.9f,.07f,2.2f},.95f,-5,'B'},
+        {5,{-10.45f,.07f,-4},1,12,'C'},
+        {1,{-10.95f,.07f,-10.2f},.92f,-8,'B'},
+        {2,{10.8f,.07f,8.2f},1.05f,-10,'A'},
+        {4,{10.45f,.07f,2},.90f,6,'B'},
+        {6,{10.9f,.07f,-4.5f},1,-9,'C'},
+        {0,{10.35f,.07f,-10.4f},.98f,11,'A'},
+        {2,{-14.3f,.07f,5.5f},.92f,-7,'A'},
+        {6,{-14.15f,.07f,-1.1f},.94f,10,'C'},
+        {4,{-14.3f,.07f,-7.5f},.82f,-6,'B'},
+        {1,{14.35f,.07f,5.2f},.95f,7,'A'},
+        {3,{14.45f,.07f,-6.8f},.98f,-12,'B'}
+    };
+    if(useNewLayout)for(size_t i=0;i<sizeof(specs)/sizeof(specs[0]);++i){
+        const auto& q=specs[i];
+        AddPlacement(graves,*library[q.kind],q.position,q.scale,q.yaw);
+        const float w=i<8?3.15f:2.8f,d=i<8?3.8f:3.35f;
+        surfaces.push_back({{q.position.x,.035f,q.position.z},{w,.07f,d},plotColor});
+        if(i<8)surfaces.push_back({{q.position.x<0?-8.2f:8.2f,.02f,q.position.z+1.8f},
+            {3.8f,.04f,.7f},stone});
+        std::cout<<"TUMBA_INSTANCIA "<<i<<" variante="<<q.kind+1<<" categoria="<<q.category
+            <<" posicion="<<q.position.x<<","<<q.position.y<<","<<q.position.z
+            <<" escala="<<q.scale<<" yaw="<<q.yaw<<std::endl;
+    }
+
     // ZONA 6: novena tumba, destacada sobre una plataforma de ofrenda.
     surfaces.push_back({ {0,0.05f,-18.45f}, {6.6f,0.1f,5.0f}, plotColor });
-    AddPlacement(graves, tumba2, glm::vec3(0,0.1f,-18.9f), 0.62f);
+    // Se conserva la novena tumba, a la derecha de la ofrenda y sobre la misma plataforma.
+    AddPlacement(graves, tumba2, glm::vec3(1.8f,0.1f,-18.9f), 0.62f);
     if (!ValidateLayout(church, graves))
     {
         std::cerr << "ERROR: interseccion en la distribucion arquitectonica." << std::endl;
@@ -495,6 +886,7 @@ int main(int argc, char** argv)
         AddPlacement(decorations, farol, glm::vec3(x,0.04f,12.5f), 2.1f);
     AddPlacement(decorations, farol, glm::vec3(-4.0f,0,17.5f), ESC_FAROL);
     // Ofrendas pequeñas en ocho tumbas, sin invadir los caminos laterales.
+    if (!useNewLayout)
     for (int side = 0; side < 2; ++side)
         for (int row = 0; row < 4; ++row)
         {
@@ -516,9 +908,15 @@ int main(int argc, char** argv)
     // La Alumbrada: mayor densidad de flores y veladoras; centro de la composicion.
     for (float x : {-2.2f,2.2f})
         for (float z : {-19.7f,-18.5f,-17.3f})
-            AddPlacement(decorations, macizo, glm::vec3(x,0.1f,z), 1.25f);
-    for (float x : {-1.35f,1.35f})
-        AddPlacement(decorations, maceta, glm::vec3(x,0.1f,-18.9f), 1.2f);
+        {
+            glm::vec3 flowerPosition(x,0.1f,z);
+            // Cinco macizos se conservan en los bordes de La Alumbrada, al nivel del terreno.
+            if (x > 0.0f) flowerPosition = glm::vec3(4.1f,0.0f,z);
+            else if (z < -18.0f) flowerPosition = glm::vec3(-5.1f,0.0f,z);
+            AddPlacement(decorations, macizo, flowerPosition, 1.25f);
+        }
+    for (float x : {-3.75f,3.75f})
+        AddPlacement(decorations, maceta, glm::vec3(x,0.0f,-16.9f), 1.2f);
     for (float x : {-2.85f,2.85f})
         for (int i = 0; i < 9; ++i)
             AddPlacement(decorations, veladora, glm::vec3(x,0.1f,-20.3f+i*0.48f), 1.6f);
@@ -529,15 +927,127 @@ int main(int argc, char** argv)
     for (float x : {-0.75f,0.75f})
     {
         AddPlacement(decorations, flor, glm::vec3(x*0.87f,0.1f,-17.4f), 1.4f);
-        AddPlacement(decorations, cempasuchil, glm::vec3(x*1.53f,0.1f,-17.75f), 1.1f);
+        AddPlacement(decorations, cempasuchil, glm::vec3(x*1.53f,0.1f,x > 0.0f ? -17.35f : -17.75f), 1.1f);
     }
     AddPlacement(decorations, farol, glm::vec3(-4.8f,0,-16.9f), 2.4f);
     AddPlacement(decorations, farol, glm::vec3(4.8f,0,-16.9f), 2.4f);
+
+    std::vector<AttachedProp> attached;
+    size_t addedGround=0;
+    if(useNewLayout){
+        const size_t preserved=decorations.size();
+        for(size_t i=0;i<13;++i){
+            const GraveSpec& q=specs[i];const Placement& grave=graves[i];
+            const size_t before=decorations.size()+attached.size();
+            const auto worldProp=[&](Model& model,float x,float z,float scale,float yaw){
+                glm::vec3 pos(x,0,z);
+                Placement item=Grounded(model,pos,glm::vec3(scale*q.scale),yaw);
+                float support=GroundSupportY(item.bounds,surfaces);
+                if(support<0)return;
+                pos.y=support+(&model==&petals?.002f:0);
+                item=Grounded(model,pos,glm::vec3(scale*q.scale),yaw);
+                if(ClearGroundProp(item,church,altar,graves,decorations))decorations.push_back(item);
+            };
+            const auto groundProp=[&](Model& model,float dx,float dz,float scale,float yaw){
+                glm::vec3 pos=glm::vec3(grave.matrix*glm::vec4(dx,0,dz,1));
+                worldProp(model,pos.x,pos.z,scale,q.yaw+yaw);
+            };
+            const float front=(grave.model->BoundsMax().z)+.27f;
+            groundProp(veladora,-.40f,front,.8f,-7+float(i%3)*9);
+            groundProp(vela,.38f,front+.05f,.72f,13);
+            groundProp(petals,.05f,front+.58f,.43f,4-float(i%4)*3);
+            if(q.category!='A'){
+                groundProp(lightPot,-1.04f,.30f,.92f,17+float(i)*13);
+                groundProp(lightPot,1.00f,-.40f,.80f,-23-float(i)*11);
+                groundProp(veladora,-.95f,.95f,.85f,16);
+                groundProp(veladora,.95f,.62f,.75f,-9);
+            }
+            if(q.category=='C'){
+                groundProp(lightPot,-1.18f,-.85f,1.03f,47);
+                groundProp(lightPot,1.18f,.65f,.95f,-35);
+                groundProp(vela,-1.08f,1.05f,.93f,5);
+                groundProp(veladora,.95f,-.90f,.96f,10);
+                groundProp(petals,-.72f,front+.12f,.35f,-20);
+            }
+
+            const float offset=i<8?1.40f:1.20f;
+            const int flowerRows=q.category=='A'?1:(q.category=='B'?2:4);
+            for(int row=0;row<flowerRows;++row){
+                const float zOffset=q.category=='A'?.45f:-.88f+row*(q.category=='B'?1.4f:.55f);
+                for(int side=0;side<(q.category=='A'?1:2);++side){
+                    const float sign=q.category=='A'?(i%2?-1.0f:1.0f):(side==0?-1.0f:1.0f);
+                    worldProp(lightPot,q.position.x+sign*offset,q.position.z+zOffset,
+                        .95f+float((i+row+side)%3)*.09f,17.0f+float(i*13+row*37+side*19));
+                }
+            }
+            const float plotFront=q.position.z+(i<8?1.9f:1.675f);
+            worldProp(petals,q.position.x+.1f,plotFront+.58f,.43f,2-float(i%3)*3);
+            if(q.category=='C'){
+                worldProp(veladora,q.position.x-.65f,plotFront-.15f,.9f,9);
+                worldProp(vela,q.position.x+.65f,plotFront-.25f,.87f,-12);
+            }
+
+            float y=0;Bounds patch={glm::vec3(-.36f,0,-.37f),glm::vec3(.36f,10,.78f)};
+            if(q.kind==0)y=.205f;
+            if(q.kind==1){y=.19f;patch={glm::vec3(-.43f,0,.05f),glm::vec3(.43f,10,.98f)};}
+            if(q.kind==3)y=.4825f;
+            if(q.kind==4){y=.233f;patch={glm::vec3(-.5f,0,.10f),glm::vec3(.5f,10,1.08f)};}
+            if(q.kind==5){y=.3275f;patch={glm::vec3(-.75f,0,-.40f),glm::vec3(-.11f,10,.18f)};}
+            const auto topProp=[&](Model& model,float x,float z,float scale){
+                glm::vec3 pos=glm::vec3(grave.matrix*glm::vec4(x,y,z,1));
+                Placement item=Grounded(model,pos,glm::vec3(scale*q.scale),q.yaw);
+                const Bounds b=WorldBounds(model,glm::inverse(grave.matrix)*item.matrix);
+                if(b.min.x<patch.min.x||b.max.x>patch.max.x||b.min.z<patch.min.z||b.max.z>patch.max.z
+                    ||!SupportedOnMesh(*grave.model,b,y))return;
+                for(const auto& a:attached)if(OverlapXZ(item.bounds,a.item.bounds))return;
+                attached.push_back({item,i,patch,y});
+            };
+            if(y>0){
+                if(q.kind==5)topProp(lightPot,-.43f,-.12f,.72f);
+                else if(q.category!='A')topProp(lightPot,-.10f,.34f,.60f);
+                else topProp(veladora,-.20f,.42f,.65f);
+                if(q.kind!=5)topProp(vela,.23f,.68f,.63f);
+            }
+            std::cout<<"DECORACION_TUMBA "<<i<<" categoria="<<q.category
+                <<" instancias_adicionales="<<decorations.size()+attached.size()-before<<std::endl;
+        }
+        for(size_t i=preserved;i<decorations.size();++i){
+            const auto& prop=decorations[i];
+            const float expected=GroundSupportY(prop.bounds,surfaces)+(prop.model==&petals?.002f:0);
+            if(fabs(prop.bounds.min.y-expected)>.002f){std::cerr<<"ERROR: apoyo de adorno de suelo "<<i<<std::endl;return EXIT_FAILURE;}
+        }
+        addedGround=decorations.size()-preserved;
+        std::cout<<"DECORACION_3C: global_conservada="<<preserved<<" nueva_suelo="<<addedGround
+            <<" nueva_sobre_tapas="<<attached.size()<<"; categorias A=5 B=5 C=4 (incluye ceremonial previa)."<<std::endl;
+        for(float x:{-16.45f,16.45f}){
+            Bounds corridor={glm::vec3(x-.35f,0,-13),glm::vec3(x+.35f,EYE_HEIGHT,12)};
+            for(const auto& grave:graves)if(OverlapXZ(corridor,grave.bounds)){glfwTerminate();return EXIT_FAILURE;}
+            for(const auto& prop:decorations)if(OverlapXZ(corridor,prop.bounds)){glfwTerminate();return EXIT_FAILURE;}
+        }
+        std::cout<<"VALIDACION: corredores exteriores de 0.7 unidades libres en ambos lados."<<std::endl;
+    }
+    if(!ValidateAttached(attached,graves,church,altar)){glfwTerminate();return EXIT_FAILURE;}
+    std::vector<Placement> allDecorations=decorations;
+    for(const auto& a:attached)allDecorations.push_back(a.item);
+
+    if(!ValidateOuterAccess(church,altar,graves,allDecorations)){std::cerr<<"ERROR: acceso secundario."<<std::endl;glfwTerminate();return EXIT_FAILURE;}
     if (!ValidateDecorations(church, graves, decorations)) { glfwTerminate(); return EXIT_FAILURE; }
+    if (!ValidateOfrenda(ofrenda, altar, graves, allDecorations, validate)) { glfwTerminate(); return EXIT_FAILURE; }
     if (validate && !ValidateAnimationPaths(church,graves,cuervoCuerpo,cuervoAlaDer,cuervoAlaIzq,luciernaga,sol,luna))
     { std::cerr << "ERROR: trayectoria de animacion." << std::endl; glfwTerminate(); return EXIT_FAILURE; }
     const Placement perchedCrow = Grounded(cuervo, glm::vec3(-3.2f,0.65f,17.5f), glm::vec3(1.2f));
-    std::cout << "ESCENA: terreno 34x42, templo + 9 tumbas, " << decorations.size() << " instancias decorativas; 5 luces puntuales." << std::endl;
+    std::cout << "ESCENA: terreno 34x42, templo + " << graves.size() << " tumbas, " << allDecorations.size() << " instancias decorativas; 5 luces puntuales." << std::endl;
+
+
+    std::vector<Model*> loaded={&Piso,&sol,&luna,&flor,&tumba,&tumba2,&tumba3,&iglesia,&iglesiaV2,
+        &cuervo,&maceta,&macizo,&cempasuchil,&cuervoCuerpo,&cuervoAlaDer,&cuervoAlaIzq,&fogata,&vela,
+        &luciernaga,&farol,&veladora,&ofrenda,&graveV1,&graveV2,&graveV3,&graveV4,&graveV5,&graveV6,&graveV7,&lightPot,&petals};
+    std::vector<Placement> drawn={ground,church,altar,perchedCrow};
+    drawn.insert(drawn.end(),graves.begin(),graves.end());drawn.insert(drawn.end(),allDecorations.begin(),allDecorations.end());
+    for(Model* m:{&luna,&fogata,&vela,&farol,&veladora,&luciernaga,&cuervoCuerpo,&cuervoAlaDer,&cuervoAlaIzq})
+        drawn.push_back(Grounded(*m,glm::vec3(0),glm::vec3(1)));
+    if(!ESCENA_NOCTURNA)drawn.push_back(Grounded(sol,glm::vec3(0),glm::vec3(1)));
+    SceneBudget(loaded,drawn,surfaces.size());
 
     GLuint concreteTexture = SOIL_load_OGL_texture("images/photoreal_concrete_01-512x512_0.png",
         SOIL_LOAD_AUTO, SOIL_CREATE_NEW_ID, SOIL_FLAG_MIPMAPS | SOIL_FLAG_INVERT_Y);
@@ -583,9 +1093,32 @@ int main(int argc, char** argv)
         {"10-luna-t6", {0,3,14}, {0,18,-22}, 6},
         {"11-luna-t20", {0,3,14}, {0,18,-22}, 20},
         {"12-luciernaga-t22", {7.3f,1.7f,5}, {7.8f,1.65f,2}, 22},
-        {"13-luciernaga-t24", {7.3f,1.7f,5}, {7.8f,1.65f,2}, 24}
+        {"13-luciernaga-t24", {7.3f,1.7f,5}, {7.8f,1.65f,2}, 24},
+        {"14-ofrenda-frente", {-0.8f,1.7f,-15.95f}, {-0.8f,1.0f,-19.25f}, 0},
+        {"15-ofrenda-lateral", {-4.2f,2.0f,-17.3f}, {-0.8f,1.05f,-19.25f}, 0},
+        {"16-alumbrada-superior", {5.0f,6.0f,-14.5f}, {0.0f,0.5f,-18.6f}, 0},
+        {"17-camino-principal", {0,1.7f,3.5f}, {0,3.5f,-5}, 0},
+        {"18-fachada-templo", {0,4.3f,10.6f}, {0,4.1f,-4}, 0},
+        {"19-lateral-templo", {13.5f,5.5f,-7.8f}, {0,3.4f,-8.5f}, 0},
+        {"20-superior-distribucion", {0,57,0.6f}, {0,0,-1}, 0},
+        {"21-ofrenda-frontal", {-0.8f,1.7f,-14.5f}, {-0.8f,1.5f,-19.25f}, 0},
+        {"22-ofrenda-lateral", {-6.6f,3.3f,-17.2f}, {-0.8f,1.45f,-19.25f}, 0},
+        {"23-ofrenda-superior", {-0.8f,9.2f,-19.24f}, {-0.8f,0.1f,-19.25f}, 0},
+        {"24-ofrenda-recorrido", {-3.7f,1.7f,-15.3f}, {-0.8f,1.0f,-19.25f}, 0},
+        {"25-tumba-A", {-8.15f,1.7f,11.4f}, {-10.5f,.8f,8.6f}, 0},
+        {"26-tumba-B", {12.9f,2.0f,5.4f}, {10.45f,1.1f,2}, 0},
+        {"27-tumba-C", {-7.9f,2.3f,-.4f}, {-10.45f,1.0f,-4}, 0}
     };
     int captureIndex = 0;
+    const int benchmarkViews[]={0,6,5};
+    size_t benchmarkView=0;int benchmarkFrame=0;
+    std::vector<double> frameTimes;
+    std::ofstream fps;
+    if(benchmark){
+        fps.open(captureDirectory+"/fps.csv");
+        if(!fps)return EXIT_FAILURE;
+        fps<<"layout,view,width,height,warmup,frames,average_fps,median_ms,p95_ms\n";
+    }
     int resultCode = EXIT_SUCCESS;
     if (validate)
     {
@@ -612,6 +1145,14 @@ int main(int argc, char** argv)
         firstMouse=true; MouseCallback(window,100,100); MouseCallback(window,160,100);
         if (glm::length(camera.GetFront()-previousFront) < 0.01f)
         { std::cerr << "ERROR: control de mouse." << std::endl; return EXIT_FAILURE; }
+        const bool initialChurch = useIglesiaV2;
+        KeyCallback(window,GLFW_KEY_F2,0,GLFW_PRESS,0);
+        KeyCallback(window,GLFW_KEY_F2,0,GLFW_RELEASE,0);
+        if (useIglesiaV2 == initialChurch) return EXIT_FAILURE;
+        KeyCallback(window,GLFW_KEY_F2,0,GLFW_PRESS,0);
+        KeyCallback(window,GLFW_KEY_F2,0,GLFW_RELEASE,0);
+        if (useIglesiaV2 != initialChurch) return EXIT_FAILURE;
+        std::cout << "VALIDACION: selector F2 cambia V1/V2 y restaura la seleccion inicial; un solo templo por cuadro." << std::endl;
         std::cout << "VALIDACION: WASD, flechas y mouse; altura peatonal constante." << std::endl;
     }
     const double animationStart = glfwGetTime();
@@ -620,6 +1161,7 @@ int main(int argc, char** argv)
     // Game loop
     while (!glfwWindowShouldClose(window))
     {
+        const auto frameStart=std::chrono::steady_clock::now();
         // Calcular deltaTime
         GLfloat currentFrame = static_cast<GLfloat>(glfwGetTime() - animationStart);
         deltaTime = (std::min)(currentFrame - lastFrame, 0.05f);
@@ -628,7 +1170,7 @@ int main(int argc, char** argv)
         glfwPollEvents();
         if (validate)
         {
-            const Viewpoint& shot = viewpoints[captureIndex];
+            const Viewpoint& shot = viewpoints[benchmark ? benchmarkViews[benchmarkView] : captureIndex];
             const glm::vec3 direction = glm::normalize(shot.target-shot.eye);
             camera = Camera(shot.eye,glm::vec3(0,1,0),glm::degrees(atan2(direction.z,direction.x)),glm::degrees(asin(direction.y)));
             t = shot.time;
@@ -766,11 +1308,13 @@ int main(int argc, char** argv)
         DrawPlacement(ground, lightingShader, concreteTexture);
         glUniform2f(glGetUniformLocation(lightingShader.Program, "textureTiling"), 1.0f, 1.0f);
         for (const Surface& surface : surfaces) DrawSurface(surface, VAO, lightingShader);
-        DrawPlacement(church, lightingShader);
+        DrawPlacement(useIglesiaV2 ? churchV2 : churchV1, lightingShader);
         // ZONA 5 y tumba principal de ZONA 6: tres instancias base reutilizadas.
         for (const Placement& grave : graves) DrawPlacement(grave, lightingShader);
         for (const Placement& decoration : decorations) DrawPlacement(decoration, lightingShader);
+        for (const auto& prop : attached) DrawPlacement(prop.item, lightingShader);
         DrawPlacement(perchedCrow, lightingShader);
+        DrawPlacement(altar, lightingShader);
 
         // El Sol y su animacion se conservan; la version nocturna solo presenta la Luna.
         if (!ESCENA_NOCTURNA)
@@ -840,12 +1384,30 @@ int main(int argc, char** argv)
                 std::cerr << "ERROR OpenGL: " << error << std::endl;
                 resultCode=EXIT_FAILURE; break;
             }
+            if(benchmark){
+                const double ms=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-frameStart).count();
+                if(benchmarkFrame>=30)frameTimes.push_back(ms);
+                if(++benchmarkFrame==150){
+                    double sum=0;for(double v:frameTimes)sum+=v;
+                    std::sort(frameTimes.begin(),frameTimes.end());
+                    double average=1000.0*frameTimes.size()/sum;
+                    fps<<(useNewLayout?"nueva":"anterior")<<","<<viewpoints[benchmarkViews[benchmarkView]].name
+                        <<","<<SCREEN_WIDTH<<","<<SCREEN_HEIGHT<<",30,"<<frameTimes.size()<<","
+                        <<std::fixed<<std::setprecision(3)<<average<<","<<frameTimes[frameTimes.size()/2]
+                        <<","<<frameTimes[static_cast<size_t>(.95*(frameTimes.size()-1))]<<"\n";
+                    fps.flush();
+                    std::cout<<"FPS: "<<viewpoints[benchmarkViews[benchmarkView]].name<<" "<<average<<std::endl;
+                    frameTimes.clear();benchmarkFrame=0;
+                    if(++benchmarkView==3)glfwSetWindowShouldClose(window,GL_TRUE);
+                }
+            } else {
             const std::string output = captureDirectory + "/" + viewpoints[captureIndex].name + ".bmp";
             if (!CaptureFrame(output))
             { std::cerr << "ERROR: captura " << output << std::endl; resultCode=EXIT_FAILURE; break; }
             std::cout << "CAPTURA: " << output << " t=" << t << std::endl;
             ++captureIndex;
             if (captureIndex == sizeof(viewpoints)/sizeof(viewpoints[0])) glfwSetWindowShouldClose(window,GL_TRUE);
+            }
         }
         glfwSwapBuffers(window);
     }
@@ -887,6 +1449,12 @@ void DoMovement()
 void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mode)
 {
     if (GLFW_KEY_ESCAPE == key && GLFW_PRESS == action)glfwSetWindowShouldClose(window, GL_TRUE);
+    if (key == GLFW_KEY_F2 && action == GLFW_PRESS)
+    {
+        useIglesiaV2 = !useIglesiaV2;
+        glfwSetWindowTitle(window,ChurchWindowTitle());
+        std::cout << "IGLESIA_ACTIVA: " << (useIglesiaV2 ? "V2" : "V1") << std::endl;
+    }
 
     if (key >= 0 && key < 1024){
         if (action == GLFW_PRESS)
