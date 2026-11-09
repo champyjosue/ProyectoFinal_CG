@@ -410,3 +410,6 @@ FodyWeavers.xsd
 
 # Modelos Wavefront: son recursos del proyecto, no objetos del compilador.
 !/ConfigInicial/Models/*.obj
+
+# OBJ Wavefront dentro de subcarpetas de recursos de produccion.
+!/ConfigInicial/Models/**/*.obj
