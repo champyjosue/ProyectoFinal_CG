@@ -25,7 +25,7 @@ namespace cantoyaMixquic
     struct Estado
     {
         glm::vec3 posicion;
-        float visibilidad, guiñada, inclinacion, brillo;
+        float visibilidad, guinada, inclinacion, brillo;
     };
 
     inline Estado Evaluar(const Trayectoria& ruta,float tiempo)
@@ -101,7 +101,7 @@ namespace cantoyaMixquic
                 if(actual.visibilidad<=0) continue;
                 ++visibles;
                 auto matriz = glm::translate(glm::mat4(1),actual.posicion);
-                matriz = glm::rotate(matriz,actual.guiñada,glm::vec3(0,1,0));
+                matriz = glm::rotate(matriz,actual.guinada,glm::vec3(0,1,0));
                 matriz = glm::rotate(matriz,actual.inclinacion,glm::vec3(0,0,1));
                 matriz = glm::scale(matriz,glm::vec3(ruta.escala*actual.visibilidad));
                 glUniformMatrix4fv(modelo,1,GL_FALSE,glm::value_ptr(matriz));
