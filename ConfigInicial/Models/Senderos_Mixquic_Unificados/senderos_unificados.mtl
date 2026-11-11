@@ -1,0 +1,8 @@
+newmtl Cantera_Mixquic_Senderos
+Ka 1 1 1
+Kd 0.58 0.52 0.43
+Ks 0.08 0.08 0.08
+Ke 0 0 0
+Ns 12
+d 1
+illum 2

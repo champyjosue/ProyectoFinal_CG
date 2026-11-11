@@ -1,0 +1,223 @@
+newmtl Visitante_Piel_canela
+Ka 0.160 0.160 0.160
+Kd 0.71765 0.50196 0.35686
+Ks 0.055 0.055 0.055
+Ns 13
+d 1.0
+illum 2
+
+newmtl Visitante_Piel_sombra
+Ka 0.160 0.160 0.160
+Kd 0.59608 0.34510 0.25098
+Ks 0.055 0.055 0.055
+Ns 14
+d 1.0
+illum 2
+
+newmtl Visitante_Labio
+Ka 0.160 0.160 0.160
+Kd 0.47451 0.23529 0.21569
+Ks 0.055 0.055 0.055
+Ns 15
+d 1.0
+illum 2
+
+newmtl Visitante_Pelo
+Ka 0.160 0.160 0.160
+Kd 0.13725 0.11765 0.16471
+Ks 0.055 0.055 0.055
+Ns 11
+d 1.0
+illum 2
+
+newmtl Visitante_Mechon
+Ka 0.160 0.160 0.160
+Kd 0.20000 0.14902 0.20392
+Ks 0.055 0.055 0.055
+Ns 13
+d 1.0
+illum 2
+
+newmtl Visitante_Ojos
+Ka 0.160 0.160 0.160
+Kd 0.93333 0.87843 0.78824
+Ks 0.055 0.055 0.055
+Ns 20
+d 1.0
+illum 2
+
+newmtl Visitante_Iris
+Ka 0.160 0.160 0.160
+Kd 0.23922 0.17647 0.14118
+Ks 0.055 0.055 0.055
+Ns 22
+d 1.0
+illum 2
+
+newmtl Visitante_Pupila
+Ka 0.160 0.160 0.160
+Kd 0.10588 0.08627 0.10588
+Ks 0.055 0.055 0.055
+Ns 22
+d 1.0
+illum 2
+
+newmtl Visitante_Abrigo
+Ka 0.160 0.160 0.160
+Kd 0.31373 0.20392 0.30588
+Ks 0.055 0.055 0.055
+Ns 9
+d 1.0
+illum 2
+
+newmtl Visitante_Solapa
+Ka 0.160 0.160 0.160
+Kd 0.41176 0.29412 0.39216
+Ks 0.055 0.055 0.055
+Ns 10
+d 1.0
+illum 2
+
+newmtl Visitante_Puno
+Ka 0.160 0.160 0.160
+Kd 0.20392 0.16863 0.23137
+Ks 0.055 0.055 0.055
+Ns 8
+d 1.0
+illum 2
+
+newmtl Visitante_Camisa
+Ka 0.160 0.160 0.160
+Kd 0.17647 0.20392 0.27451
+Ks 0.055 0.055 0.055
+Ns 8
+d 1.0
+illum 2
+
+newmtl Visitante_Pantalon
+Ka 0.160 0.160 0.160
+Kd 0.20392 0.26275 0.34510
+Ks 0.055 0.055 0.055
+Ns 8
+d 1.0
+illum 2
+
+newmtl Visitante_Costura
+Ka 0.160 0.160 0.160
+Kd 0.25882 0.31765 0.40000
+Ks 0.055 0.055 0.055
+Ns 8
+d 1.0
+illum 2
+
+newmtl Visitante_Bota
+Ka 0.160 0.160 0.160
+Kd 0.31373 0.21961 0.17647
+Ks 0.055 0.055 0.055
+Ns 10
+d 1.0
+illum 2
+
+newmtl Visitante_Suela
+Ka 0.160 0.160 0.160
+Kd 0.15686 0.14118 0.16863
+Ks 0.055 0.055 0.055
+Ns 8
+d 1.0
+illum 2
+
+newmtl Visitante_Cordones
+Ka 0.160 0.160 0.160
+Kd 0.60392 0.47451 0.39608
+Ks 0.055 0.055 0.055
+Ns 8
+d 1.0
+illum 2
+
+newmtl Visitante_Panuelo
+Ka 0.160 0.160 0.160
+Kd 0.71373 0.37647 0.23137
+Ks 0.055 0.055 0.055
+Ns 8
+d 1.0
+illum 2
+
+newmtl Visitante_Tejido_claro
+Ka 0.160 0.160 0.160
+Kd 0.82745 0.58431 0.33333
+Ks 0.055 0.055 0.055
+Ns 8
+d 1.0
+illum 2
+
+newmtl Visitante_Metal_opaco
+Ka 0.160 0.160 0.160
+Kd 0.66667 0.54510 0.31765
+Ks 0.055 0.055 0.055
+Ns 26
+d 1.0
+illum 2
+
+newmtl Visitante_Tallo
+Ka 0.160 0.160 0.160
+Kd 0.27451 0.36471 0.21961
+Ks 0.055 0.055 0.055
+Ns 9
+d 1.0
+illum 2
+
+newmtl Visitante_Hoja
+Ka 0.160 0.160 0.160
+Kd 0.40784 0.50196 0.26667
+Ks 0.055 0.055 0.055
+Ns 8
+d 1.0
+illum 2
+
+newmtl Visitante_Petalo_oscuro
+Ka 0.160 0.160 0.160
+Kd 0.78824 0.35294 0.12549
+Ks 0.055 0.055 0.055
+Ns 8
+d 1.0
+illum 2
+
+newmtl Visitante_Petalo
+Ka 0.160 0.160 0.160
+Kd 0.90588 0.54510 0.15686
+Ks 0.055 0.055 0.055
+Ns 8
+d 1.0
+illum 2
+
+newmtl Visitante_Petalo_luz
+Ka 0.160 0.160 0.160
+Kd 1.00000 0.77647 0.33333
+Ks 0.055 0.055 0.055
+Ns 8
+d 1.0
+illum 2
+
+newmtl Visitante_Vaso
+Ka 0.160 0.160 0.160
+Kd 0.47059 0.22353 0.25098
+Ks 0.055 0.055 0.055
+Ns 29
+d 1.0
+illum 2
+
+newmtl Visitante_Cera
+Ka 0.160 0.160 0.160
+Kd 0.94902 0.82745 0.63529
+Ks 0.055 0.055 0.055
+Ns 8
+d 1.0
+illum 2
+
+newmtl Visitante_Mecha
+Ka 0.160 0.160 0.160
+Kd 0.20392 0.14902 0.16471
+Ks 0.055 0.055 0.055
+Ns 8
+d 1.0
+illum 2

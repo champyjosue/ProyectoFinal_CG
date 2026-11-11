@@ -94,6 +94,21 @@ public:
 		position.y = height;
 	}
 
+	// Solo limite exterior del terreno: no colision fisica contra objetos.
+	void ConstrainWalkingXZ(GLfloat minX,GLfloat maxX,GLfloat minZ,GLfloat maxZ)
+	{
+		if(!walking)return;
+		position.x=glm::clamp(position.x,minX,maxX);
+		position.z=glm::clamp(position.z,minZ,maxZ);
+	}
+
+	void SetWalkingXZ(GLfloat x, GLfloat z)
+	{
+		if (!walking) return;
+		position.x = x;
+		position.z = z;
+	}
+
 	// Processes input received from a mouse input system. Expects the offset value in both the x and y direction.
 	void ProcessMouseMovement(GLfloat xOffset, GLfloat yOffset, GLboolean constrainPitch = true)
 	{

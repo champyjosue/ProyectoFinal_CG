@@ -57,8 +57,9 @@ public:
         this->setupMesh();
     }
 
-    void Draw(Shader shader, GLuint diffuseOverride = 0)
+    void Draw(const Shader& shader, GLuint diffuseOverride = 0, const glm::vec3* colorOverride = nullptr)
     {
+        const auto& uniforms = shader.DrawLocations();
         GLuint diffuseNr = 1;
         GLuint specularNr = 1;
         bool hasSpecular = false;
@@ -67,29 +68,26 @@ public:
         {
             glActiveTexture(GL_TEXTURE0 + i);
 
-            stringstream ss;
-            string number;
-            string name = this->textures[i].type;
-
+            const std::string& name = textures[i].type;
+            GLint sampler;
             if (name == "texture_diffuse")
             {
-                ss << diffuseNr++;
+                const GLuint number = diffuseNr++;
+                sampler = number == 1 ? uniforms.diffuseSampler
+                    : glGetUniformLocation(shader.Program, (name + std::to_string(number)).c_str());
             }
             else if (name == "texture_specular")
             {
                 hasSpecular = true;
-                ss << specularNr++;
+                const GLuint number = specularNr++;
+                sampler = number == 1 ? uniforms.specularSampler
+                    : glGetUniformLocation(shader.Program, (name + std::to_string(number)).c_str());
             }
-
-            number = ss.str();
-
-            glUniform1i(
-                glGetUniformLocation(
-                    shader.Program,
-                    (name + number).c_str()
-                ),
-                i
-            );
+            else
+            {
+                sampler = glGetUniformLocation(shader.Program, name.c_str());
+            }
+            glUniform1i(sampler, i);
 
             glBindTexture(GL_TEXTURE_2D, this->textures[i].id);
         }
@@ -99,33 +97,34 @@ public:
         {
             glActiveTexture(GL_TEXTURE0);
             glBindTexture(GL_TEXTURE_2D, diffuseOverride);
-            glUniform1i(glGetUniformLocation(shader.Program, "texture_diffuse1"), 0);
+            glUniform1i(uniforms.diffuseSampler, 0);
         }
 
         // Los MTL existentes documentan Kd > 1 como material luminoso.
         // Solo ese material emite: no se agrega una luz por cada vela decorativa.
-        const float peak = (std::max)(materialColor.r, (std::max)(materialColor.g, materialColor.b));
+        const glm::vec3& diffuseColor=colorOverride ? *colorOverride : materialColor;
+        const float peak = (std::max)(diffuseColor.r, (std::max)(diffuseColor.g, diffuseColor.b));
         const bool hasEmission = glm::dot(materialEmission, materialEmission) > 0.0f;
         const glm::vec3 emission = hasEmission ? materialEmission
-            : (peak > 1.0f ? materialColor * 0.7f : glm::vec3(0.0f));
-        glUniform3fv(glGetUniformLocation(shader.Program, "emissionColor"), 1, glm::value_ptr(emission));
-        glUniform1i(glGetUniformLocation(shader.Program, "hasSpecularTexture"), hasSpecular && diffuseOverride == 0 ? 1 : 0);
+            : (peak > 1.0f ? diffuseColor * 0.7f : glm::vec3(0.0f));
+        glUniform3fv(uniforms.emission, 1, glm::value_ptr(emission));
+        glUniform1i(uniforms.hasSpecular, hasSpecular && diffuseOverride == 0 ? 1 : 0);
 
         // Color del material (.mtl)
         glUniform3fv(
-            glGetUniformLocation(shader.Program, "materialColor"),
+            uniforms.color,
             1,
-            glm::value_ptr(this->materialColor)
+            glm::value_ptr(diffuseColor)
         );
 
         // Bandera: 1 si tiene textura, 0 si usa solo color del .mtl
         glUniform1i(
-            glGetUniformLocation(shader.Program, "hasTexture"),
+            uniforms.hasTexture,
             (diffuseOverride != 0 || this->textures.size() > 0) ? 1 : 0
         );
 
         glUniform1f(
-            glGetUniformLocation(shader.Program, "material.shininess"),
+            uniforms.shininess,
             16.0f
         );
 
@@ -147,6 +146,14 @@ public:
         }
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, 0);
+    }
+
+    void ReleaseGpu()
+    {
+        glDeleteVertexArrays(1,&VAO);
+        glDeleteBuffers(1,&VBO);
+        glDeleteBuffers(1,&EBO);
+        VAO = VBO = EBO = 0;
     }
 
 private:

@@ -1,0 +1,217 @@
+# Mixquic: colores lineales y emision; sin texturas externas.
+
+newmtl Mixquic_Piedra_Nocturna
+Ka 1 1 1
+Kd 0.0350000001 0.0469999984 0.0719999969
+Ks 0.5 0.5 0.5
+Ke 0 0 0
+Ns 8.09999528
+Ni 1.5
+d 1
+illum 2
+Pr 0.910000026
+Pm 0
+
+newmtl Mixquic_Madera_Oscura
+Ka 1 1 1
+Kd 0.0649999976 0.0240000002 0.0130000003
+Ks 0.5 0.5 0.5
+Ke 0 0 0
+Ns 39.9999952
+Ni 1.5
+d 1
+illum 2
+Pr 0.800000012
+Pm 0
+
+newmtl Mixquic_Mantel_Indigo
+Ka 1 1 1
+Kd 0.0280000009 0.0120000001 0.064000003
+Ks 0.5 0.5 0.5
+Ke 0 0 0
+Ns 14.4000011
+Ni 1.5
+d 1
+illum 2
+Pr 0.879999995
+Pm 0
+
+newmtl Mixquic_Bronce_Calido
+Ka 1 1 1
+Kd 0.579999983 0.264999986 0.0549999997
+Ks 0.5 0.5 0.5
+Ke 0 0 0
+Ns 409.599982
+Ni 1.5
+d 1
+illum 3
+Pr 0.360000014
+Pm 0.649999976
+
+newmtl Mixquic_Oro_Cempasuchil
+Ka 1 1 1
+Kd 1 0.540000021 0.0250000004
+Ks 0.5 0.5 0.5
+Ke 0 0 0
+Ns 108.899989
+Ni 1.5
+d 1
+illum 2
+Pr 0.670000017
+Pm 0
+
+newmtl Mixquic_Barro_Terracota
+Ka 1 1 1
+Kd 0.349999994 0.0920000002 0.0370000005
+Ks 0.5 0.5 0.5
+Ke 0 0 0
+Ns 28.9000057
+Ni 1.5
+d 1
+illum 2
+Pr 0.829999983
+Pm 0
+
+newmtl Mixquic_Papel_Turquesa
+Ka 1 1 1
+Kd 0.0149999997 0.389999986 0.340000004
+Ks 0.5 0.5 0.5
+Ke 0 0 0
+Ns 57.6000046
+Ni 1.5
+d 1
+illum 2
+Pr 0.75999999
+Pm 0
+
+newmtl Mixquic_Verde_Follaje
+Ka 1 1 1
+Kd 0.119999997 0.234999999 0.0350000001
+Ks 0.5 0.5 0.5
+Ke 0 0 0
+Ns 102.399995
+Ni 1.5
+d 1
+illum 2
+Pr 0.680000007
+Pm 0
+
+newmtl Mixquic_Naranja_Cempasuchil
+Ka 1 1 1
+Kd 1 0.204999998 0.00600000005
+Ks 0.5 0.5 0.5
+Ke 0 0 0
+Ns 96.1000015
+Ni 1.5
+d 1
+illum 2
+Pr 0.689999998
+Pm 0
+
+newmtl Mixquic_Marfil
+Ka 1 1 1
+Kd 0.870000005 0.730000019 0.460000008
+Ks 0.5 0.5 0.5
+Ke 0 0 0
+Ns 184.900006
+Ni 1.5
+d 1
+illum 2
+Pr 0.569999993
+Pm 0
+
+newmtl Mixquic_Llama_Ambar
+Ka 1 1 1
+Kd 1 0.289999992 0.0149999997
+Ks 0.5 0.5 0.5
+Ke 4 1.15999997 0.0599999987
+Ns 302.500013
+Ni 1.5
+d 1
+illum 2
+Pr 0.449999988
+Pm 0
+
+newmtl Mixquic_Llama_Nucleo
+Ka 1 1 1
+Kd 1 0.829999983 0.360000014
+Ks 0.5 0.5 0.5
+Ke 7 5.80999988 2.5200001
+Ns 359.999993
+Ni 1.5
+d 1
+illum 2
+Pr 0.400000006
+Pm 0
+
+newmtl Mixquic_Pan_Dorado
+Ka 1 1 1
+Kd 0.479999989 0.185000002 0.0419999994
+Ks 0.5 0.5 0.5
+Ke 0 0 0
+Ns 67.599995
+Ni 1.5
+d 1
+illum 2
+Pr 0.74000001
+Pm 0
+
+newmtl Mixquic_Papel_Magenta
+Ka 1 1 1
+Kd 0.639999986 0.0219999999 0.219999999
+Ks 0.5 0.5 0.5
+Ke 0 0 0
+Ns 39.9999952
+Ni 1.5
+d 1
+illum 2
+Pr 0.800000012
+Pm 0
+
+newmtl Mixquic_Rojo_Carmin
+Ka 1 1 1
+Kd 0.560000002 0.0170000009 0.0250000004
+Ks 0.5 0.5 0.5
+Ke 0 0 0
+Ns 359.999993
+Ni 1.5
+d 1
+illum 2
+Pr 0.400000006
+Pm 0
+
+newmtl Mixquic_Sepia_Retrato
+Ka 1 1 1
+Kd 0.170000002 0.0710000023 0.0219999999
+Ks 0.5 0.5 0.5
+Ke 0 0 0
+Ns 22.4999928
+Ni 1.5
+d 1
+illum 2
+Pr 0.850000024
+Pm 0
+
+newmtl Mixquic_Agua
+Ka 1 1 1
+Kd 0.119999997 0.230000004 0.300000012
+Ks 0.5 0.5 0.5
+Ke 0 0 0
+Ns 774.400005
+Ni 1.5
+d 1
+illum 3
+Pr 0.119999997
+Pm 0.150000006
+
+newmtl Mixquic_Papel_Morado
+Ka 1 1 1
+Kd 0.219999999 0.0350000001 0.419999987
+Ks 0.5 0.5 0.5
+Ke 0 0 0
+Ns 48.4000126
+Ni 1.5
+d 1
+illum 2
+Pr 0.779999971
+Pm 0

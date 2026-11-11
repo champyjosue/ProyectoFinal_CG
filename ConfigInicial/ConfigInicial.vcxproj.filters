@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <Filter Include="Archivos de origen">
@@ -24,6 +24,24 @@
     <ClInclude Include="Camera.h">
       <Filter>Archivos de encabezado</Filter>
     </ClInclude>
+    <ClInclude Include="SkyBox.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="MixquicPerimeter.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="VisitanteAnimado.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="VisitanteApariencia.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="MixquicSuelo6C.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="VisitanteDatos.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="VisitanteKeyframes.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="VisitanteAcciones.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="VisitanteAccionesDatos.inl"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="MixquicNavegacion.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="AmbienteMixquic.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="CantoyaMixquic.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="MixquicVegetacion.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="MixquicAlumbrada.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="MixquicVegetacionDatos.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="MixquicNavegacionDatos.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="MixquicUnified.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="MixquicUnifiedData.h"><Filter>Archivos de encabezado</Filter></ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="Shader\modelLoading.frag">
@@ -41,6 +59,27 @@
     <None Include="Shader\lighting.frag">
       <Filter>Archivos de origen\Shader</Filter>
     </None>
+    <None Include="Shader\HaloMixquic6C.vs"><Filter>Archivos de origen\Shader</Filter></None>
+    <None Include="Shader\HaloMixquic6C.frag"><Filter>Archivos de origen\Shader</Filter></None>
+    <None Include="images\tierra_mixquic_6c.png" />
+    <None Include="images\tierra_mixquic_6c1.png" />
+    <None Include="Shader\lighting_alumbrada.frag">
+      <Filter>Archivos de origen\Shader</Filter>
+    </None>
+    <None Include="Shader\SombraDir.vs">
+      <Filter>Archivos de origen\Shader</Filter>
+    </None>
+    <None Include="Shader\SombraDir.frag">
+      <Filter>Archivos de origen\Shader</Filter>
+    </None>
+    <None Include="Shader\HumoCopal.vs">
+      <Filter>Archivos de origen\Shader</Filter>
+    </None>
+    <None Include="Shader\HumoCopal.frag">
+      <Filter>Archivos de origen\Shader</Filter>
+    </None>
+    <None Include="Shader\SkyBox.vs"><Filter>Archivos de origen\Shader</Filter></None>
+    <None Include="Shader\SkyBox.frag"><Filter>Archivos de origen\Shader</Filter></None>
     <None Include="Shader\lighting.vs">
       <Filter>Archivos de origen\Shader</Filter>
     </None>
