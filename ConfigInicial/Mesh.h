@@ -149,6 +149,14 @@ public:
         glBindTexture(GL_TEXTURE_2D, 0);
     }
 
+    void ReleaseGpu()
+    {
+        glDeleteVertexArrays(1,&VAO);
+        glDeleteBuffers(1,&VBO);
+        glDeleteBuffers(1,&EBO);
+        VAO = VBO = EBO = 0;
+    }
+
 private:
     GLuint VAO, VBO, EBO;
 

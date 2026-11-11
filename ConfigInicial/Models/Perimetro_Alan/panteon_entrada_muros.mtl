@@ -1,0 +1,9 @@
+# Material para Entrada y Muros del Panteon (Alta Calidad)
+newmtl mat_entrada_muros
+Ka 0.35 0.35 0.35
+Kd 1.00 1.00 1.00
+Ks 0.18 0.18 0.18
+Ns 24.0
+d 1.0
+illum 2
+map_Kd panteon_entrada_muros.png

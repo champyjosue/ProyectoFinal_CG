@@ -413,3 +413,9 @@ FodyWeavers.xsd
 
 # OBJ Wavefront dentro de subcarpetas de recursos de produccion.
 !/ConfigInicial/Models/**/*.obj
+
+# Archivos locales de modelado y pruebas de Mixquic.
+/Pruebas_Assets/
+/capturas-*/
+*.blend
+*.blend[0-9]

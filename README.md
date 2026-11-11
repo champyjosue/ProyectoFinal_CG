@@ -1,71 +1,74 @@
-# ProyectoFinal_CG
+# Panteón de Mixquic · ProyectoFinal_CG
 
-Proyecto de Computacion Grafica con OpenGL, GLEW, GLFW, GLM, Assimp y SOIL2.
+Recorrido nocturno de La Alumbrada en OpenGL 3.3. La escena predeterminada tiene un terreno de 50 × 64 unidades, 62 tumbas, 326 adornos, 49 plantas, iglesia V2, ofrenda híbrida y cinco visitantes articulados. Incluye portón animado, cielo nocturno, campana, luciérnaga, cinco globos de Cantoya, sombras direccionales y humo de copal.
 
-## Abrir y ejecutar
+## Compilar y ejecutar
 
-1. Abrir `ConfigInicial.sln` en Visual Studio con Desarrollo para el escritorio con C++, MSVC v143 y Windows SDK 10 instalados.
-2. Seleccionar `Debug | x86` (o `Release | x86`). En las propiedades del proyecto, x86 aparece como `Win32`.
-3. Compilar con Ctrl+Mayus+B y ejecutar con F5.
+1. Instala Visual Studio 2022 con **Desarrollo para el escritorio con C++**, MSVC v143, Windows SDK 10 y el controlador gráfico con soporte para OpenGL 3.3.
+2. Abre `ConfigInicial.sln`. Selecciona `Debug | x86` o `Release | x86`. En el proyecto, la plataforma se llama `Win32`.
+3. Compila la solución y ejecuta con F5 o Ctrl+F5. El proyecto establece `ConfigInicial` como directorio de trabajo.
 
-La solucion utiliza x86 porque los binarios incluidos de GLFW, Assimp y GLEW son de 32 bits. Para migrar a x64 hay que sustituir todas esas dependencias por versiones x64 compatibles; cambiar solo el selector no es suficiente.
+La unidad principal compilada es `ConfigInicial/Mixquic.cpp`. Los ejemplos de prácticas quedan fuera de la compilación de esta solución. La salida se genera en `bin/Win32/Debug` o `bin/Win32/Release` y los intermedios en `obj`.
 
-Los directorios de encabezados y bibliotecas son relativos al proyecto. No requieren rutas de usuario ni instalaciones globales de OpenGL/GLEW.
+Para ejecutar manualmente desde PowerShell, en la raíz del proyecto:
 
-El ejecutable y las DLL necesarias se generan en `bin/Win32/Debug/` o `bin/Win32/Release/`. Los archivos intermedios quedan en `obj/`. Visual Studio ejecuta desde `ConfigInicial/` para encontrar `Shader/`, `Models/` e `images/`. Al ejecutar manualmente, usar tambien ese directorio de trabajo.
+```powershell
+Set-Location -LiteralPath .\ConfigInicial
+& "..\bin\Win32\Release\ConfigInicial.exe"
+```
 
-## Dependencias
+Mantén `ConfigInicial` como directorio de trabajo. Los modelos, texturas, shaders y caras del cubemap se resuelven mediante rutas relativas.
 
-- GLEW: encabezados de `External Libraries/GLEW/include`, `lib/Release/Win32/glew32.lib` y la DLL existente `ConfigInicial/glew32.dll`. El archivo de enlace restaurado procede de la copia local del curso, cuyos encabezados y DLL coinciden por SHA-256 con los del proyecto. Distribucion oficial: https://glew.sourceforge.net/.
-- GLFW: se enlaza `glfw3dll.lib` y se copia `glfw3.dll` junto al ejecutable, evitando mezclar el runtime del binario estatico de Release con el de Debug.
-- SOIL2: se compilan los cuatro archivos C incluidos en `ConfigInicial/SOIL2/` para cada configuracion, en vez de enlazar `soil2-debug.lib` en ambas.
-- Assimp: se utiliza `assimp-vc140-mt.lib` y se copia su DLL incluida. Esta DLL depende del runtime de depuracion de Visual C++ (`MSVCP140D.dll`, `VCRUNTIME140D.dll`, `ucrtbased.dll`), tambien en Release. La maquina de desarrollo debe tener Visual Studio con C++ instalado; para distribuir el programa hay que sustituir Assimp por una compilacion Release compatible.
-- GLM: solo necesita encabezados. OpenGL se enlaza mediante `opengl32.lib` del Windows SDK.
+## Dependencias y limitaciones
 
-La unidad principal actual es `Mixquic.cpp` (antes `Iluminacion.cpp`). Los demas ejemplos tienen sus propios `main` y no se deben agregar todos a la compilacion simultaneamente.
+- Se conservan GLEW, GLFW y Assimp x86 de la base del proyecto. El proyecto copia sus tres DLL junto al ejecutable al compilar. GLM usa encabezados, SOIL2 se compila desde sus cuatro archivos C y OpenGL enlaza con `opengl32.lib` del Windows SDK.
+- La DLL incluida `assimp-vc140-mt.dll` requiere el CRT **de depuración** de Visual C++ también al ejecutar Release. Entre sus dependencias están `MSVCP140D.dll`, `VCRUNTIME140D.dll` y `ucrtbased.dll`. El redistribuible estándar de Release por sí solo no cubre ese requisito. La entrega se valida en un equipo de desarrollo con Visual Studio y C++.
+- Las bibliotecas incluidas son de 32 bits. Un cambio a x64 requiere dependencias compatibles de 64 bits.
+- El mapa direccional usa geometría estática de la iglesia y las tumbas. Las otras fuentes conservan sus aportes locales sin mapas de sombras propios.
 
-## Recursos pendientes del repositorio
+## Controles
 
-La prueba de arranque detecto que no se incluyeron Models/TumbaTransparente.obj ni Models/Blue+Mushroom.obj. Su carga y sus bloques de dibujo en `Mixquic.cpp` quedaron comentados temporalmente, con marcas TODO. Cuando esten disponibles los archivos, descomentar ambos bloques para cada modelo. piso.obj se restauro desde la copia local del curso, verificando que piso.mtl coincide por SHA-256. Estos recursos son independientes de las bibliotecas y de la compilacion.
+| Control | Acción |
+|---|---|
+| W, A, S, D o flechas | Caminar y desplazarse lateralmente |
+| Ratón | Mirar alrededor |
+| Shift izquierdo o derecho | Correr mientras se mantiene pulsado |
+| R | Abrir o cerrar el portón cuando el muro está activo |
+| F2 | Alternar la iglesia V1 y V2 |
+| F6 | Reiniciar las animaciones de los visitantes |
+| Esc | Cerrar |
 
+## Demostraciones
 
+Pasa un argumento al iniciar para colocar la cámara de la demostración correspondiente.
 
+| Demostración | Argumento |
+|---|---|
+| Colocar una flor | `--demo-personaje=flor` |
+| Encender una veladora | `--demo-personaje=veladora` |
+| Persignarse | `--demo-personaje=oracion` |
+| Caminar hasta una tumba | `--demo-personaje=caminar` |
+| Arrodillarse | `--demo-personaje=rodillas` |
+| Campana | `--demo-ambiente=campana` |
+| Luciérnaga | `--demo-ambiente=insecto` |
+| Globos de Cantoya | `--demo-ambiente=globos` |
 
-## Iglesia V2 experimental — Fase 2B
+## Selectores de escena
 
-V2 se carga por defecto. Pulsar **F2** para alternar V1/V2; solo se dibuja un templo. Tambien se puede iniciar con `--iglesia=v1` o `--iglesia=v2`, conservando como directorio de trabajo ConfigInicial/. En Visual Studio, agregar ese argumento en las propiedades de depuracion para elegir la version de inicio.
+- `--iluminacion=alumbrada` activa el perfil predeterminado. `--iluminacion=original` recupera la iluminación de Fase 4F.
+- `--sombras=off` y `--humo=off` desactivan por separado esos efectos dentro de Alumbrada.
+- `--cantoya-modelo=v1` recupera la geometría anterior. `--cantoya-modelo=v2` activa la predeterminada. `--globos=off` oculta los globos.
+- `--vegetacion=off`, `--muro=off`, `--skybox=off` y `--personajes=off` sirven para comparaciones.
+- `--iglesia=v1|v2`, `--ofrenda=v1|v2|v2-hibrida` y `--distribucion=62|77|anterior` permiten recuperar variantes previas. Pasa uno de los valores indicados, por ejemplo `--distribucion=77`.
 
-Ambas versiones se colocan en (0,0,-8.5), fachada +Z y Y arriba. V1 conserva escala 0.7; V2 usa 1.0 porque ya mide 8.96 de ancho, 10.43 de profundidad y 8.52 de altura. Los recursos V1 no se modificaron. V2 esta en ConfigInicial/Models/Iglesia_Mixquic_V2/, con cuatro PNG en textures/ y rutas relativas.
+## Verificación reproducible
 
-Validacion reproducible: ConfigInicial.exe --iglesia=v2 --validar-escena CARPETA_EXISTENTE (repetir con v1). Comprueba los recursos de la GPU y genera 20 capturas deterministas, incluidas fachada, lateral y vista superior. Evidencias y comparativas: Pruebas_Assets/Integracion_Iglesia_V2_001/. No se cambiaron las luces globales, shaders, la ofrenda ni el recorrido.
+Desde `ConfigInicial`, crea una carpeta vacía fuera del árbol de recursos. Usa su ruta con `--validar-escena`.
 
+```powershell
+$evidencia = Join-Path ([System.IO.Path]::GetTempPath()) ('Mixquic-' + [guid]::NewGuid())
+New-Item -ItemType Directory -Path $evidencia | Out-Null
+& "..\bin\Win32\Release\ConfigInicial.exe" --validar-navegacion --validar-escena $evidencia
+```
 
-## Ofrenda V2 — Fase 3A
-
-La ofrenda enriquecida es la opción predeterminada. Se conserva la anterior intacta en Models/ofrenda.obj y Models/ofrenda.mtl. Para iniciar con ella usar --ofrenda=v1; para la nueva usar --ofrenda=v2. Estos argumentos son independientes de --iglesia=v1/v2 y del selector F2 del templo.
-
-La nueva malla está en ConfigInicial/Models/Ofrenda_Mixquic_V2/. Mantiene la posición (-0.8,0.1,-19.25), escala 0.5, Y arriba y fachada +Z. Mide 3.24 de ancho, 2.45 de profundidad y 3.0 de altura en la escena. Tiene 81.455 triángulos, 18 materiales con Kd/Ke y ninguna textura externa. Los tres niveles originales se conservan como base; se añadieron arco floral exterior, velas, ramos, pétalos, retratos, papel picado y ofrendas.
-
-Validar desde ConfigInicial/: ConfigInicial.exe --ofrenda=v2 --validar-escena CARPETA_EXISTENTE. Se conservan las 20 vistas anteriores y se añaden cuatro capturas completas de la ofrenda. Evidencias, comparación y archivo Blender editable: Pruebas_Assets/Ofrenda_Mixquic_V2_001/. No se modificaron iglesia, tumbas, decoración existente, iluminación global ni shaders.
-
-
-## Distribución variada — Fase 3C
-
-La distribución nueva es predeterminada: 14 tumbas, siete variantes, ornamentación A/B/C. Para comparar con las nueve anteriores iniciar con --distribucion=anterior; --distribucion=nueva restaura la opción actual. Ejecutar desde ConfigInicial/, o poner el argumento en las propiedades de depuración. Iglesia, ofrenda, controles e iluminación se conservan.
-
-Biblioteca: ConfigInicial/Models/Tumbas_Mixquic/, tres PNG compartidas entre modelos. Recursos ligeros derivados: ConfigInicial/Models/Decoracion_Mixquic_3C/. Assets y Blender aprobados intactos.
-
---validar-escena CARPETA_EXISTENTE genera 27 capturas; --medir-fps CARPETA_EXISTENTE mide tres vistas deterministas (1000x700, VSync desactivado, 30 cuadros de calentamiento + 120 medidos, glFinish). Usar carpetas nuevas para cada prueba. Informe, inventario, comparación y respaldo: Pruebas_Assets/Fase3C_Distribucion_001/INFORME_FASE3C.md. Debug/Release x86 verificados. Sin commits ni limpieza del proyecto.
-
-
-## Checkpoint de integración en staging
-
-Esta copia contiene el estado aprobado de Mixquic Fase 3. El principal es ConfigInicial/Mixquic.cpp; la solución conserva Debug/Release x86 (Win32 en el proyecto), MSVC v143 y Windows SDK 10. Las bibliotecas mantienen sus versiones existentes. Assimp requiere el runtime Debug de Visual C++ también al ejecutar Release; no es todavía un paquete portátil de distribución.
-
-Compilar desde la raíz de la solución y ejecutar con directorio de trabajo ConfigInicial/. Por ejemplo, desde ConfigInicial/:
-
-    & "..\bin\Win32\Release\ConfigInicial.exe" --iglesia=v2 --ofrenda=v2 --distribucion=nueva
-
-Se conservan --iglesia=v1/v2, F2 para alternar templo, --ofrenda=v1/v2 y --distribucion=anterior/nueva. --validar-escena CARPETA_NUEVA_EXISTENTE genera 27 capturas; --medir-fps CARPETA_NUEVA_EXISTENTE mide con las condiciones documentadas en Fase 3C. Usar carpetas de salida externas al árbol de recursos.
-
-Las referencias históricas de este README a Pruebas_Assets, renders, checkpoints y archivos Blender describen evidencias de desarrollo archivadas aparte: no son dependencias de ejecución ni se copiaron a staging. El inventario y el informe de este checkpoint se entregan por separado. No se cambiaron shaders, iluminación, cámara, controles ni versiones de bibliotecas. No se realizaron commits ni publicación.
+En la configuración predeterminada, esta prueba produce 45 capturas, comprueba los recorridos, los controles y los recursos de la escena y guarda una lectura del mapa de profundidad. Para medir rendimiento, usa `--medir-fps` con otra carpeta vacía y las mismas condiciones de GPU, energía, resolución y perfil de escena.

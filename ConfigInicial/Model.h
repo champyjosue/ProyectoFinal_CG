@@ -41,6 +41,11 @@ public:
         }
     }
 
+    void DrawMesh(size_t index, const Shader& shader)
+    {
+        meshes[index].Draw(shader);
+    }
+
     const glm::vec3& BoundsMin() const { return boundsMin; }
     const glm::vec3& BoundsMax() const { return boundsMax; }
     bool IsLoaded() const { return !meshes.empty(); }

@@ -8,14 +8,41 @@
 #include <algorithm>
 #include <vector>
 #include <set>
+#include <memory>
 #include <chrono>
 #include <iomanip>
+#include <cstddef>
 
 // GLEW
 #include <GL/glew.h>
 
 // GLFW
 #include <GLFW/glfw3.h>
+
+// Los contadores se activan solamente en el cuadro de evidencia.
+namespace alumbradaMedicion
+{
+bool activo=false;
+unsigned llamadas=0,triangulos=0;
+void Sumar(GLenum modo,GLsizei vertices)
+{
+    if(!activo) return;
+    ++llamadas;
+    if(modo==GL_TRIANGLES) triangulos+=static_cast<unsigned>(vertices/3);
+}
+void Arrays(GLenum modo,GLint primero,GLsizei cantidad)
+{
+    Sumar(modo,cantidad);
+    ::glDrawArrays(modo,primero,cantidad);
+}
+void Elementos(GLenum modo,GLsizei cantidad,GLenum tipo,const void* offset)
+{
+    Sumar(modo,cantidad);
+    ::glDrawElements(modo,cantidad,tipo,offset);
+}
+}
+#define glDrawArrays alumbradaMedicion::Arrays
+#define glDrawElements alumbradaMedicion::Elementos
 
 // Other Libs
 #include "SOIL2/SOIL2.h"
@@ -30,11 +57,12 @@
 #include "Shader.h"
 #include "Camera.h"
 #include "Model.h"
+#include "SkyBox.h"
 
 // Function prototypes
 void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mode);
 void MouseCallback(GLFWwindow* window, double xPos, double yPos);
-void DoMovement();
+void DoMovement(float seconds = -1.f);
 
 // Window dimensions
 const GLuint WIDTH = 1000, HEIGHT = 700;
@@ -50,6 +78,9 @@ bool firstMouse = true;
 bool useIglesiaV2 = true;
 // Fase 3A: la ofrenda anterior permanece disponible con --ofrenda=v1.
 bool useOfrendaV2 = true;
+// Fase4A.5: asset hibrido aprobado, con original y V1 conservados.
+bool useOfrendaHibrida = true;
+bool useExpandedTerrain = true;
 // Fase 3C: comparacion reversible al iniciar.
 bool useNewLayout = true;
 const char* ChurchWindowTitle()
@@ -76,7 +107,7 @@ float sunAngle = glm::radians(225.0f);
 float sunOrbitRadius = 8.0f; // Orbita elevada: Y 10..26, detras del templo.
 glm::vec3 posFogata(-4.0f, 0.0f, -18.6f);       // La Alumbrada
 glm::vec3 posVela(-3.3f, 0.0f, -2.95f);        // Fachada, fuera del paso
-glm::vec3 posLuciernaga(7.8f, 1.65f, 2.0f);     // Tumbas derechas
+glm::vec3 posLuciernaga(4.0f, 1.65f, 2.0f);     // Tumbas derechas
 glm::vec3 posFarol(3.2f, 0.65f, 17.5f);         // Acceso
 glm::vec3 posVeladora(0.0f, 0.1f, -17.55f);      // Ofrenda principal
 const float ESC_FOGATA = 1.4f;
@@ -628,24 +659,230 @@ void SceneBudget(const std::vector<Model*>& loaded, const std::vector<Placement>
         << " nombres_materiales_en_uso=" << materials.size() << std::endl;
 }
 
+#include "MixquicUnified.h"
+#include "MixquicPerimeter.h"
+#include "VisitanteAnimado.h"
+#include "VisitanteAcciones.h"
+#include "MixquicNavegacion.h"
+#include "AmbienteMixquic.h"
+#include "CantoyaMixquic.h"
+#include "MixquicVegetacion.h"
+#include "MixquicAlumbrada.h"
+
+static MixquicPerimeter* walkingPerimeter = nullptr;
+static bool replayVisitor = false;
+static navegacion4e::Navegacion* walkingNavigation = nullptr;
+
+static bool ValidatePerimeterControls(GLFWwindow* window, MixquicPerimeter& perimeter)
+{
+    const Camera savedCamera = camera;
+    const float savedTime = deltaTime;
+    deltaTime = 0.05f;
+    const auto stand = [](float x, float z) {
+        camera = Camera({x, EYE_HEIGHT, z}, {0, 1, 0}, -90, 0);
+        camera.SetWalkingMode(EYE_HEIGHT, 3.5f);
+    };
+    const auto position = []() { return glm::vec2(camera.GetPosition().x, camera.GetPosition().z); };
+    const auto pressR = [window]() {
+        KeyCallback(window, GLFW_KEY_R, 0, GLFW_PRESS, 0);
+        KeyCallback(window, GLFW_KEY_R, 0, GLFW_REPEAT, 0);
+        KeyCallback(window, GLFW_KEY_R, 0, GLFW_RELEASE, 0);
+    };
+    const auto animate = [&]() {
+        for (int i = 0; i < 30; ++i) perimeter.Advance(deltaTime, position());
+    };
+    const auto walk = [window](int key, int steps) {
+        KeyCallback(window, key, 0, GLFW_PRESS, 0);
+        for (int i = 0; i < steps; ++i) DoMovement();
+        KeyCallback(window, key, 0, GLFW_RELEASE, 0);
+    };
+
+    stand(0, 31.5f);
+    pressR(); animate();
+    walk(GLFW_KEY_W, 35);
+    const bool closedStops = perimeter.Angle() == 0.0f && position().y >= 30.85f;
+    pressR(); animate();
+    walk(GLFW_KEY_W, 40);
+    const bool entered = perimeter.Angle() == perimeter.openAngle && position().y < 28.0f;
+    walk(GLFW_KEY_S, 48);
+    const bool exited = position().y > 31.4f;
+
+    stand(0, MixquicPerimeter::frontZ);
+    pressR(); animate();
+    const bool cancelsClosing = perimeter.Angle() == perimeter.openAngle;
+    walk(GLFW_KEY_W, 24);
+    const bool leavesThreshold = position().y < 28.0f;
+
+    stand(-1.13f, 29.25f);
+    perimeter.SetCaptureAngle(0.0f);
+    pressR(); animate();
+    const bool pausesOpening = perimeter.Angle() > 0.0f && perimeter.Angle() < perimeter.openAngle;
+    walk(GLFW_KEY_W, 24);
+    animate();
+    const bool resumesOpening = perimeter.Angle() == perimeter.openAngle;
+
+    stand(23.7f, 0);
+    walk(GLFW_KEY_D, 22);
+    const bool stopsAtSide = position().x >= 23.7f && position().x <= 23.96f;
+    stand(0, -30.7f);
+    walk(GLFW_KEY_W, 22);
+    const bool stopsAtRear = position().y >= -30.96f;
+    camera = savedCamera;
+    deltaTime = savedTime;
+    perimeter.SetCaptureAngle(perimeter.openAngle);
+    std::cout << "PORTON PRUEBAS: cerrado_bloquea=" << closedStops << " entrada=" << entered
+              << " salida=" << exited << " cierre_ocupado=" << cancelsClosing
+              << " sale_umbral=" << leavesThreshold << " pausa_apertura=" << pausesOpening
+              << " reanuda_apertura=" << resumesOpening << " muro_lateral=" << stopsAtSide
+              << " muro_trasero=" << stopsAtRear << std::endl;
+    return closedStops && entered && exited && cancelsClosing && leavesThreshold &&
+           pausesOpening && resumesOpening && stopsAtSide && stopsAtRear;
+}
+
+
 // TODO v1.1: acceso arquitectonico, bardas perimetrales, arboles y vegetacion.
 // TODO v1.1: personajes, ofrendas adicionales, sahumerios y humo.
 // TODO v1.1: objetos interactivos y audio ambiental.
+
+static bool ValidateNavigation4E(GLFWwindow* window, MixquicPerimeter& perimeter,
+    navegacion4e::Navegacion& nav, glm::vec3& walkView, glm::vec3& runView)
+{
+    const Camera savedCamera = camera;
+    const auto savedVisitors = nav.visitantes;
+    auto press = [&](int key, int action) { KeyCallback(window,key,0,action,0); };
+    const auto setPosition = [](glm::vec3 p) {
+        camera = Camera(p,{0,1,0},-90,0);
+        camera.SetWalkingMode(EYE_HEIGHT,3.5f);
+    };
+    const glm::vec3 start(0,EYE_HEIGHT,28);
+    const glm::vec3 diagonalStart(0,EYE_HEIGHT,26);
+    const auto advance = [&](int subdivisions, bool run, bool diagonal) {
+        setPosition(diagonal ? diagonalStart : start);
+        press(GLFW_KEY_W,GLFW_PRESS);
+        if (run) press(GLFW_KEY_LEFT_SHIFT,GLFW_PRESS);
+        if (diagonal) press(GLFW_KEY_D,GLFW_PRESS);
+        for (int i=0;i<subdivisions;++i) DoMovement(1.f/subdivisions);
+        press(GLFW_KEY_W,GLFW_RELEASE);
+        if (run) press(GLFW_KEY_LEFT_SHIFT,GLFW_RELEASE);
+        if (diagonal) press(GLFW_KEY_D,GLFW_RELEASE);
+        return camera.GetPosition();
+    };
+    walkView = advance(60,false,false);
+    runView = advance(60,true,false);
+    bool speed = fabs(glm::length(walkView-start)-3.5f)<.001f &&
+                 fabs(glm::length(runView-start)-5.95f)<.001f;
+    for (int n : {30,144})
+        speed = speed && glm::length(advance(n,true,false)-runView)<.001f;
+    const bool diagonal = fabs(glm::length(advance(60,true,true)-diagonalStart)-5.95f)<.001f;
+    setPosition({0,EYE_HEIGHT,31.5f});
+    perimeter.SetCaptureAngle(0);
+    press(GLFW_KEY_W,GLFW_PRESS);
+    press(GLFW_KEY_RIGHT_SHIFT,GLFW_PRESS);
+    DoMovement(.25f);
+    DoMovement(.25f);
+    const bool closed = camera.GetPosition().z >= 30.85f;
+    perimeter.SetCaptureAngle(perimeter.openAngle);
+    DoMovement(.25f);
+    DoMovement(.25f);
+    const bool entered = camera.GetPosition().z < 29;
+    press(GLFW_KEY_W,GLFW_RELEASE);
+    press(GLFW_KEY_S,GLFW_PRESS);
+    DoMovement(.25f);
+    DoMovement(.25f);
+    DoMovement(.25f);
+    const bool exited = camera.GetPosition().z > 31.4f;
+    press(GLFW_KEY_S,GLFW_RELEASE);
+    press(GLFW_KEY_RIGHT_SHIFT,GLFW_RELEASE);
+    const auto churchStop = nav.Desplazar({0,-2.9f},{0,-8.f},&perimeter);
+    const bool solid = churchStop.y >= nav.iglesia.max.z+.349f && churchStop.y < -3.1f;
+    nav.visitantes = {{5.7f,17.23f}};
+    const bool actor = nav.Desplazar({5.7f,19},{5.7f,16.9f},&perimeter).y >= 17.919f;
+    nav.visitantes = savedVisitors;
+    setPosition({0,EYE_HEIGHT,31.5f});
+    press(GLFW_KEY_S,GLFW_PRESS);
+    DoMovement(.25f);
+    const bool limit = fabs(camera.GetPosition().z - 31.65f) < .001f;
+    press(GLFW_KEY_S,GLFW_RELEASE);
+    camera=savedCamera;
+    std::cout << "CONTROL 4E: caminar=" << glm::length(walkView-start)
+        << " correr=" << glm::length(runView-start) << " tiempos=30/60/144"
+        << " velocidad=" << speed << " diagonal=" << diagonal << " cerrado=" << closed
+        << " entra=" << entered << " sale=" << exited << " solido=" << solid
+        << " visitante=" << actor << " limite=" << limit << std::endl;
+    return speed && diagonal && closed && entered && exited && solid && actor && limit;
+}
 
 int main(int argc, char** argv)
 {
     bool validate = false;
     bool benchmark = false;
+    bool useSkybox = true;
+    bool usePerimeter = true;
+    bool articulatedAmbient = true;
+    bool useLanterns = true;
+    bool useVegetation = true;
+    bool cinematica = true, usarSombras = true, usarHumo = true;
+    cantoyaMixquic::Modelo modeloCantoya = cantoyaMixquic::Modelo::V2;
+    ambienteMixquic::Demo ambientDemo = ambienteMixquic::Demo::Ninguna;
+    bool correctedAccess = true, reducedLayout = true, validateNavigation = false;
+    bool useVisitors = true;
+    bool captureVisitorPoses = false;
+    bool captureFlower = false;
+    bool playFlower = true;
+    bool visitorDemoCamera = false;
+    int visitorPose = 0;
+    const visitanteAcciones::Pista* demoAction = nullptr;
     std::string captureDirectory;
     for (int i = 1; i < argc; ++i)
     {
         const std::string argument = argv[i];
+        const auto* action = visitanteAcciones::BuscarDemostracion(argument);
         if (argument == "--iglesia=v1") useIglesiaV2 = false;
         else if (argument == "--iglesia=v2") useIglesiaV2 = true;
-        else if (argument == "--ofrenda=v1") useOfrendaV2 = false;
-        else if (argument == "--ofrenda=v2") useOfrendaV2 = true;
+        else if (argument == "--ofrenda=v1") { useOfrendaV2=false; useOfrendaHibrida=false; }
+        else if (argument == "--ofrenda=v2") { useOfrendaV2=true; useOfrendaHibrida=false; }
+        else if (argument == "--ofrenda=v2-hibrida") { useOfrendaV2=true; useOfrendaHibrida=true; }
+        else if (argument == "--ambiente=original") articulatedAmbient = false;
+        else if (argument == "--ambiente=animado") articulatedAmbient = true;
+        else if (argument == "--demo-ambiente=campana") ambientDemo = ambienteMixquic::Demo::Campana;
+        else if (argument == "--demo-ambiente=insecto") ambientDemo = ambienteMixquic::Demo::Insecto;
+        else if (argument == "--demo-ambiente=globos") ambientDemo = ambienteMixquic::Demo::Globos;
+        else if (argument == "--globos=on") useLanterns = true;
+        else if (argument == "--globos=off") useLanterns = false;
+        else if (argument == "--vegetacion=on") useVegetation = true;
+        else if (argument == "--vegetacion=off") useVegetation = false;
+        else if (argument == "--iluminacion=original") cinematica = false;
+        else if (argument == "--iluminacion=alumbrada") cinematica = true;
+        else if (argument == "--sombras=off") usarSombras = false;
+        else if (argument == "--sombras=on") usarSombras = true;
+        else if (argument == "--humo=off") usarHumo = false;
+        else if (argument == "--humo=on") usarHumo = true;
+        else if (argument == "--cantoya-modelo=v1") modeloCantoya = cantoyaMixquic::Modelo::V1;
+        else if (argument == "--cantoya-modelo=v2") modeloCantoya = cantoyaMixquic::Modelo::V2;
+        else if (argument == "--personajes=off") useVisitors = false;
+        else if (argument == "--personajes=on") useVisitors = true;
+        else if (argument == "--demo-personaje=flor")
+        { playFlower = true; visitorDemoCamera = true; demoAction = nullptr; }
+        else if (action) { playFlower = true; visitorDemoCamera = true; demoAction = action; }
+        else if (argument == "--validar-personaje=flor") captureFlower = true;
+        else if (argument == "--validar-personaje=poses") captureVisitorPoses = true;
+        else if (argument == "--pose-personaje=neutral") { playFlower = false; visitorPose = 0; }
+        else if (argument == "--pose-personaje=inclinada") { playFlower = false; visitorPose = 1; }
+        else if (argument == "--pose-personaje=brazo") { playFlower = false; visitorPose = 2; }
+        else if (argument == "--pose-personaje=rodillas") { playFlower = false; visitorPose = 3; }
+        else if (argument == "--muro=on") usePerimeter = true;
+        else if (argument == "--muro=off") usePerimeter = false;
+        else if (argument == "--skybox=on") useSkybox = true;
+        else if (argument == "--skybox=off") useSkybox = false;
+        else if (argument == "--terreno=base") useExpandedTerrain=false;
+        else if (argument == "--terreno=ampliado") useExpandedTerrain=true;
         else if (argument == "--distribucion=anterior") useNewLayout = false;
-        else if (argument == "--distribucion=nueva") useNewLayout = true;
+        else if (argument == "--distribucion=nueva" || argument == "--distribucion=77")
+        { useNewLayout = true; reducedLayout = false; }
+        else if (argument == "--distribucion=62") { useNewLayout = true; reducedLayout = true; }
+        else if (argument == "--acceso=anterior") correctedAccess = false;
+        else if (argument == "--acceso=ajustado") correctedAccess = true;
+        else if (argument == "--validar-navegacion") validateNavigation = true;
         else if (argument == "--medir-fps" && !validate && i + 1 < argc)
         {
             validate = true; benchmark = true; captureDirectory = argv[++i];
@@ -656,9 +893,40 @@ int main(int argc, char** argv)
         }
         else
         {
-            std::cerr << "Uso: ConfigInicial.exe [--iglesia=v1|--iglesia=v2] [--ofrenda=v1|--ofrenda=v2] [--distribucion=anterior|nueva] [--validar-escena carpeta_existente | --medir-fps carpeta_existente]" << std::endl;
+            std::cerr << "Uso: ConfigInicial.exe [--iglesia=v1|--iglesia=v2] [--ofrenda=v1|--ofrenda=v2|--ofrenda=v2-hibrida] [--skybox=on|off] [--muro=on|off] [--terreno=base|ampliado] [--distribucion=62|77|anterior|nueva] [--acceso=anterior|ajustado] [--validar-navegacion] [--ambiente=original|animado] [--demo-ambiente=campana|insecto|globos] [--globos=on|off] [--vegetacion=on|off] [--iluminacion=original|alumbrada] [--sombras=on|off] [--humo=on|off] [--cantoya-modelo=v1|v2] [--personajes=on|off] [--demo-personaje=flor|veladora|oracion|caminar|rodillas] [--pose-personaje=neutral|inclinada|brazo|rodillas] [--validar-personaje=poses|flor] [--validar-escena carpeta_existente | --medir-fps carpeta_existente]" << std::endl;
             return EXIT_FAILURE;
         }
+    }
+    if (!useNewLayout) useExpandedTerrain=false;
+    reducedLayout = reducedLayout && useNewLayout && useExpandedTerrain;
+    const bool mostrarVegetacion = useVegetation && reducedLayout;
+    const bool mostrarSombras = cinematica && usarSombras;
+    const bool mostrarHumo = cinematica && usarHumo && useOfrendaV2;
+    if (validateNavigation && (!validate || benchmark || !useExpandedTerrain || !usePerimeter || visitorDemoCamera))
+        return EXIT_FAILURE;
+    if (useExpandedTerrain) camera=Camera(glm::vec3(0,1.7f,28),glm::vec3(0,1,0),-90,-3);
+    if (visitorDemoCamera)
+    {
+        const glm::vec3 eye = demoAction ? demoAction->camara : glm::vec3(10.0f,1.7f,9.6f);
+        const glm::vec3 target = demoAction ? demoAction->objetivo : glm::vec3(10.8f,.75f,6.1f);
+        const glm::vec3 direction = glm::normalize(target-eye);
+        camera = Camera(eye, glm::vec3(0,1,0), glm::degrees(atan2(direction.z,direction.x)), glm::degrees(asin(direction.y)));
+    }
+    if (ambientDemo != ambienteMixquic::Demo::Ninguna)
+    {
+        glm::vec3 eye(3.7f,EYE_HEIGHT,3.7f), target=posLuciernaga;
+        if (ambientDemo == ambienteMixquic::Demo::Campana)
+        {
+            eye={-4.9f,EYE_HEIGHT,.1f};
+            target={-3.16f,5.1f,(useExpandedTerrain ? -9.5f : -8.5f)+3.35f};
+        }
+        else if (ambientDemo == ambienteMixquic::Demo::Globos)
+        {
+            eye=cantoyaMixquic::OjoDemo;
+            target=cantoyaMixquic::CentroDemo;
+        }
+        const glm::vec3 direction = glm::normalize(target-eye);
+        camera = Camera(eye,{0,1,0},glm::degrees(atan2(direction.z,direction.x)),glm::degrees(asin(direction.y)));
     }
     camera.SetWalkingMode(EYE_HEIGHT, 3.5f);
 
@@ -710,7 +978,8 @@ int main(int argc, char** argv)
     // Compilacion de Shaders
     Shader shader("Shader/modelLoading.vs", "Shader/modelLoading.frag");
     Shader lampShader("Shader/lamp.vs", "Shader/lamp.frag");
-    Shader lightingShader("Shader/lighting.vs", "Shader/lighting.frag");
+    Shader lightingShader("Shader/lighting.vs",
+        cinematica ? "Shader/lighting_alumbrada.frag" : "Shader/lighting.frag");
 
     for (GLuint program : {shader.Program, lampShader.Program, lightingShader.Program})
     {
@@ -749,7 +1018,9 @@ int main(int argc, char** argv)
     Model farol((char*)"Models/farol.obj");
     Model veladora((char*)"Models/veladora.obj");
     // Exportada desde Blender a Y-arriba, sin cambiar el archivo .blend.
-    Model ofrenda(useOfrendaV2 ? "Models/Ofrenda_Mixquic_V2/ofrenda_mixquic_v2.obj" : "Models/ofrenda.obj", true);
+    const char* ofrendaPath=useOfrendaHibrida ? "Models/Ofrenda_Mixquic_V2_Hibrida/ofrenda_v2_hibrida_prueba.obj" : (useOfrendaV2 ? "Models/Ofrenda_Mixquic_V2/ofrenda_mixquic_v2.obj" : "Models/ofrenda.obj");
+    Model ofrenda(ofrendaPath,true);
+    std::cout<<"OFRENDA_ASSET: "<<ofrendaPath<<std::endl;
 
 
     // Biblioteca: carga unica por variante, instancias mediante matrices.
@@ -774,18 +1045,18 @@ int main(int argc, char** argv)
 
     // ETAPA 2 / ZONA 3: templo centrado por su caja real, fachada hacia +Z.
     // Planta final X [-4.48,4.48], Z [-13.715,-3.285]; altura 8.5225.
-    const Placement churchV1 = Grounded(iglesia, glm::vec3(0, GROUND_Y, -8.5f), glm::vec3(0.7f));
+    Placement churchV1 = Grounded(iglesia, glm::vec3(0, GROUND_Y, -8.5f), glm::vec3(0.7f));
     // V2 ya esta exportada a escala final y Y-arriba: no reducirla de nuevo.
-    const Placement churchV2 = Grounded(iglesiaV2, glm::vec3(0, GROUND_Y, -8.5f), glm::vec3(1.0f));
-    const Placement& church = useIglesiaV2 ? churchV2 : churchV1;
+    Placement churchV2 = Grounded(iglesiaV2, glm::vec3(0, GROUND_Y, -8.5f), glm::vec3(1.0f));
+    Placement church = useIglesiaV2 ? churchV2 : churchV1;
     if (!ValidateChurchV2(iglesiaV2, churchV2))
     {
         std::cerr << "ERROR: recursos o transformacion de Iglesia V2." << std::endl; glfwTerminate(); return EXIT_FAILURE;
     }
     std::cout << "IGLESIA_ACTIVA: " << (useIglesiaV2 ? "V2 escala=1" : "V1 escala=0.7")
         << "; posicion=(0,0,-8.5); fachada=+Z; F2 alterna sin superponer." << std::endl;
-    const Placement ground = Grounded(Piso, glm::vec3(0, GROUND_Y, 0), glm::vec3(6.8f, 1.0f, 8.4f));
-    const Placement altar = Grounded(ofrenda, glm::vec3(-0.8f, 0.1f, -19.25f), glm::vec3(0.5f));
+    Placement ground = Grounded(Piso, glm::vec3(0, GROUND_Y, 0), glm::vec3(6.8f, 1.0f, 8.4f));
+    Placement altar = Grounded(ofrenda, glm::vec3(-0.8f, 0.1f, -19.25f), glm::vec3(0.5f));
     std::vector<Surface> surfaces;
     const glm::vec3 stone(0.46f, 0.42f, 0.35f);
     const glm::vec3 border(0.22f, 0.20f, 0.17f);
@@ -1060,32 +1331,164 @@ int main(int argc, char** argv)
         }
         addedGround = decorations.size() - preserved;
         std::cout << "DECORACION_3C: global_conservada=" << preserved << " nueva_suelo=" << addedGround
-            << " nueva_sobre_tapas=" << attached.size() << "; categorias A=5 B=5 C=4 (incluye ceremonial previa)." << std::endl;
+            << " nueva_sobre_tapas=" << attached.size() << "; categorias A=24 B=32 C=21 (incluye ceremonial previa)." << std::endl;
     }
     if (!ValidateAttached(attached, graves, church, altar)) { glfwTerminate(); return EXIT_FAILURE; }
     std::vector<Placement> allDecorations = decorations;
     for (const auto& a : attached)allDecorations.push_back(a.item);
 
     if (!ValidateOuterAccess(church, altar, graves, allDecorations)) { std::cerr << "ERROR: acceso secundario." << std::endl; glfwTerminate(); return EXIT_FAILURE; }
-    if (!ValidateDecorations(church, graves, decorations)) { glfwTerminate(); return EXIT_FAILURE; }
+    if (!useNewLayout && !ValidateDecorations(church, graves, decorations)) { glfwTerminate(); return EXIT_FAILURE; }
     if (!ValidateOfrenda(ofrenda, altar, graves, allDecorations, validate)) { glfwTerminate(); return EXIT_FAILURE; }
     if (validate && !ValidateAnimationPaths(church, graves, cuervoCuerpo, cuervoAlaDer, cuervoAlaIzq, luciernaga, sol, luna))
     {
         std::cerr << "ERROR: trayectoria de animacion." << std::endl; glfwTerminate(); return EXIT_FAILURE;
     }
-    const Placement perchedCrow = Grounded(cuervo, glm::vec3(-3.2f, 0.65f, 17.5f), glm::vec3(1.2f));
-    std::cout << "ESCENA: terreno 34x42, templo + " << graves.size() << " tumbas, " << allDecorations.size() << " instancias decorativas; 5 luces puntuales." << std::endl;
+    Placement perchedCrow = Grounded(cuervo, glm::vec3(-3.2f, 0.65f, 17.5f), glm::vec3(1.2f));
+    std::unique_ptr<Model> unifiedPaving;
+    Placement paving=ground;
+    if (useNewLayout) {
+        unifiedPaving.reset(new Model(useExpandedTerrain ? "Models/Senderos_Mixquic_Unificados/senderos_ampliado.obj" : "Models/Senderos_Mixquic_Unificados/senderos_base.obj"));
+        if (!PrepareUnifiedScene(churchV1,churchV2,church,ground,altar,perchedCrow,graves,decorations,attached,allDecorations,surfaces,Piso,*unifiedPaving,paving,fogata,vela,farol,veladora,validate)) {
+            std::cerr<<"ERROR: escena unificada no supera validaciones."<<std::endl;glfwTerminate();return EXIT_FAILURE;
+        }
+        if (validate && !ValidateAnimationPaths(church,graves,cuervoCuerpo,cuervoAlaDer,cuervoAlaIzq,luciernaga,sol,luna)) {
+            std::cerr<<"ERROR: animacion tras unificacion."<<std::endl;glfwTerminate();return EXIT_FAILURE;
+        }
+    }
+    std::vector<Placement> visibleGraves = graves;
+    if (reducedLayout && !navegacion4e::Reducir(graves,visibleGraves,decorations,attached,allDecorations,surfaces,*unifiedPaving))
+    {
+        std::cerr << "ERROR 4E: distribucion alternativa no valida." << std::endl;
+        return EXIT_FAILURE;
+    }
+    ambienteMixquic::CampanaInsecto ambiental;
+    if (articulatedAmbient)
+    {
+        std::vector<Bounds> obstacles = {churchV1.bounds,churchV2.bounds,altar.bounds,perchedCrow.bounds};
+        for (const auto& item : visibleGraves) obstacles.push_back(item.bounds);
+        for (const auto& item : allDecorations) obstacles.push_back(item.bounds);
+        if (!ambiental.Preparar(iglesiaV2,luciernaga) || !ambiental.VueloLibre(obstacles))
+        {
+            std::cerr << "ERROR AMBIENTE: campana, alas o envolvente de vuelo." << std::endl;
+            return EXIT_FAILURE;
+        }
+    }
+    std::cout << "DISTRIBUCION ACTIVA: tumbas=" << visibleGraves.size()
+        << " adornos=" << allDecorations.size() << " bases=" << surfaces.size() << std::endl;
+    std::cout << "ESCENA: terreno "<<(useExpandedTerrain?"50x64":"34x42")<<", templo + " << visibleGraves.size() << " tumbas, " << allDecorations.size() << " instancias decorativas; 5 luces puntuales." << std::endl;
 
 
     std::vector<Model*> loaded = { &Piso,&sol,&luna,&flor,&tumba,&tumba2,&tumba3,&iglesia,&iglesiaV2,
         &cuervo,&maceta,&macizo,&cempasuchil,&cuervoCuerpo,&cuervoAlaDer,&cuervoAlaIzq,&fogata,&vela,
         &luciernaga,&farol,&veladora,&ofrenda,&graveV1,&graveV2,&graveV3,&graveV4,&graveV5,&graveV6,&graveV7,&lightPot,&petals };
     std::vector<Placement> drawn = { ground,church,altar,perchedCrow };
-    drawn.insert(drawn.end(), graves.begin(), graves.end()); drawn.insert(drawn.end(), allDecorations.begin(), allDecorations.end());
+    drawn.insert(drawn.end(), visibleGraves.begin(), visibleGraves.end()); drawn.insert(drawn.end(), allDecorations.begin(), allDecorations.end());
     for (Model* m : { &luna,&fogata,&vela,&farol,&veladora,&luciernaga,&cuervoCuerpo,&cuervoAlaDer,&cuervoAlaIzq })
         drawn.push_back(Grounded(*m, glm::vec3(0), glm::vec3(1)));
     if (!ESCENA_NOCTURNA)drawn.push_back(Grounded(sol, glm::vec3(0), glm::vec3(1)));
+    if(unifiedPaving){loaded.push_back(unifiedPaving.get());drawn.push_back(paving);}
+    vegetacion4f::Vegetacion vegetacion;
+    if (mostrarVegetacion)
+    {
+        std::vector<Bounds> protegidos = {churchV1.bounds,churchV2.bounds,altar.bounds,perchedCrow.bounds,
+            Grounded(fogata,posFogata,glm::vec3(ESC_FOGATA)).bounds,
+            Grounded(vela,posVela,glm::vec3(ESC_VELA)).bounds,
+            Grounded(farol,posFarol,glm::vec3(ESC_FAROL)).bounds,
+            Grounded(veladora,posVeladora,glm::vec3(ESC_VELADORA)).bounds};
+        for (const auto& grave : visibleGraves) protegidos.push_back(grave.bounds);
+        for (const auto& item : allDecorations) protegidos.push_back(item.bounds);
+        for (const auto& surface : surfaces)
+            protegidos.push_back({surface.center-surface.size*.5f,surface.center+surface.size*.5f});
+        if (!vegetacion.Cargar(*unifiedPaving,protegidos)) return EXIT_FAILURE;
+    }
+    std::unique_ptr<MixquicPerimeter> perimeter;
+    if (usePerimeter && useExpandedTerrain && useNewLayout)
+    {
+        perimeter.reset(new MixquicPerimeter(correctedAccess));
+        std::vector<Bounds> obstacles = {churchV1.bounds, churchV2.bounds, altar.bounds, perchedCrow.bounds,
+            Grounded(farol, posFarol, glm::vec3(ESC_FAROL)).bounds};
+        for (const auto& grave : visibleGraves) obstacles.push_back(grave.bounds);
+        for (const auto& decoration : allDecorations) obstacles.push_back(decoration.bounds);
+        vegetacion.AgregarPerimetro(obstacles);
+        if (!perimeter->Load() || !perimeter->ValidateLayout(obstacles, paving))
+        {
+            glfwTerminate();
+            return EXIT_FAILURE;
+        }
+        walkingPerimeter = perimeter.get();
+        perimeter->AddBudget(loaded, drawn);
+    }
+    std::unique_ptr<VisitanteAnimado> visitor;
+    std::vector<std::unique_ptr<visitanteAcciones::Accion>> actions;
+    const bool captureAction = demoAction && validate && !benchmark && !captureFlower && !captureVisitorPoses;
+    const bool showFlower = !demoAction || captureFlower || captureVisitorPoses;
+    if (useVisitors && useNewLayout && useExpandedTerrain)
+    {
+        visitor.reset(new VisitanteAnimado());
+        if (!visitor->Load("Models/Visitante_Mixquic_Fase5A1")) return EXIT_FAILURE;
+        // G58: sepulcro bajo, posicion y matriz verificadas en la distribucion real.
+        const glm::vec3 position(10.20f, 0, 6.10f);
+        if (fabs(UnifiedSupportPoint(position.x, position.z, surfaces, *unifiedPaving)) > .002f)
+            return EXIT_FAILURE;
+        visitor->Place(position, 90, surfaces);
+        std::vector<Bounds> obstacles = {churchV1.bounds, churchV2.bounds, altar.bounds, perchedCrow.bounds,
+            Grounded(fogata, posFogata, glm::vec3(ESC_FOGATA)).bounds,
+            Grounded(vela, posVela, glm::vec3(ESC_VELA)).bounds,
+            Grounded(farol, posFarol, glm::vec3(ESC_FAROL)).bounds,
+            Grounded(veladora, posVeladora, glm::vec3(ESC_VELADORA)).bounds};
+        for (size_t i = 0; i < graves.size(); ++i) if (i != 57) obstacles.push_back(graves[i].bounds);
+        for (const auto& decoration : allDecorations) obstacles.push_back(decoration.bounds);
+        std::vector<UnifiedSegment> routes(std::begin(unifiedExpandedSegments), std::end(unifiedExpandedSegments));
+        if (!visitor->ValidateScene(obstacles, graves[57], routes)) return EXIT_FAILURE;
+        visitor->PrepareFlowerAnimation();
+        if (validate && !benchmark && !visitor->ValidateAnimation(obstacles, graves[57], routes)) return EXIT_FAILURE;
+        if (playFlower && !captureFlower && !captureVisitorPoses && (!visitorDemoCamera || demoAction))
+        {
+            const std::vector<Bounds> sceneObstacles(obstacles.begin(), obstacles.begin() + 8);
+            for (const auto* track : visitanteAcciones::pistas)
+            {
+                if (demoAction && demoAction != track) continue;
+                if (fabs(UnifiedSupportPoint(track->raiz.x, track->raiz.z, surfaces, *unifiedPaving)
+                    - track->raiz.y) > .003f) return EXIT_FAILURE;
+                std::unique_ptr<visitanteAcciones::Accion> actor(new visitanteAcciones::Accion(*track, *visitor, surfaces));
+                if (validate && !benchmark)
+                {
+                    auto blocking = sceneObstacles;
+                    for (size_t i = 0; i < graves.size(); ++i)
+                        if (i != track->tumba) blocking.push_back(graves[i].bounds);
+                    for (const auto& decoration : allDecorations) blocking.push_back(decoration.bounds);
+                    if (!actor->Comprobar(blocking, graves[track->tumba], routes, *unifiedPaving)) return EXIT_FAILURE;
+                }
+                actions.push_back(std::move(actor));
+            }
+        }
+        std::cout << "VISITANTE UBICACION: G58 raiz=(10.20,0,6.10) yaw=90 escala=1" << std::endl;
+    }
+    const bool captureVisitor = captureVisitorPoses || captureFlower || captureAction;
+    const bool captureAmbient = validate && !benchmark && !captureVisitor && ambientDemo != ambienteMixquic::Demo::Ninguna;
+    if (captureVisitor && ((!visitor && useVisitors) || !validate || benchmark)) return EXIT_FAILURE;
+    navegacion4e::Navegacion navigation;
+    if (useExpandedTerrain && useNewLayout && !visitorDemoCamera && !captureVisitor)
+    {
+        navigation.iglesia = church.bounds;
+        for (const auto& grave : visibleGraves) navigation.Agregar(grave.bounds);
+        for (const auto& prop : allDecorations) navigation.Agregar(prop.bounds);
+        for (const auto& item : {altar,perchedCrow,Grounded(fogata,posFogata,glm::vec3(ESC_FOGATA)),
+            Grounded(vela,posVela,glm::vec3(ESC_VELA)),Grounded(farol,posFarol,glm::vec3(ESC_FAROL)),
+            Grounded(veladora,posVeladora,glm::vec3(ESC_VELADORA))}) navigation.Agregar(item.bounds);
+        for (const auto& surface : surfaces) if (surface.size.y > .15f)
+            navigation.Agregar({surface.center-surface.size*.5f,surface.center+surface.size*.5f});
+        vegetacion.AgregarNavegacion(navigation);
+        walkingNavigation = &navigation;
+    }
     SceneBudget(loaded, drawn, surfaces.size());
+    size_t baseDrawCalls = surfaces.size() + (useSkybox ? 1 : 0);
+    for (const auto& item : drawn) baseDrawCalls += item.model->Meshes().size();
+    std::cout << "VISITANTE COMPARTIDO: rigs_extra=" << actions.size() << " juegos_OBJ=" << (visitor ? 1 : 0) << std::endl;
+    std::cout << "VISITANTE PRESUPUESTO: llamadas_base=" << baseDrawCalls << " extra_llamadas=" << (visitor && showFlower ? 44 : 0)
+        << " extra_triangulos=" << (visitor && showFlower ? 4577 : 0) << " activos_extra=" << (visitor && showFlower ? 16 : 0)
+        << " modelos_cargados_extra=" << (visitor ? 17 : 0) << std::endl;
 
     GLuint concreteTexture = SOIL_load_OGL_texture("images/photoreal_concrete_01-512x512_0.png",
         SOIL_LOAD_AUTO, SOIL_CREATE_NEW_ID, SOIL_FLAG_MIPMAPS | SOIL_FLAG_INVERT_Y);
@@ -1118,36 +1521,157 @@ int main(int argc, char** argv)
     glm::mat4 projection = glm::perspective(glm::radians(camera.GetZoom()), (GLfloat)SCREEN_WIDTH / (GLfloat)SCREEN_HEIGHT, 0.1f, 120.0f);
 
     struct Viewpoint { const char* name; glm::vec3 eye, target; float time; };
-    const Viewpoint viewpoints[] = {
-        {"01-entrada", {0,1.7f,19}, {0,3,-8}, 0},
-        {"02-atrio", {0,1.7f,11}, {0,3,-6}, 0},
-        {"03-tumbas-izquierda", {-6.2f,1.7f,6}, {-10.7f,1,2}, 0},
-        {"04-tumbas-derecha", {6.2f,1.7f,6}, {10.7f,1,2}, 0},
-        {"05-paso-lateral", {-6.2f,1.7f,-7}, {-6.2f,1.7f,-16}, 0},
-        {"06-alumbrada", {0,2.0f,-13.95f}, {0,1.0f,-18.5f}, 0},
-        {"07-distribucion", {29,31,38}, {0,0,-2}, 0},
-        {"08-cuervo-t1", {0,3,13}, {0,4.8f,6}, 1},
-        {"09-cuervo-t3", {0,3,13}, {0,4.8f,6}, 3},
-        {"10-luna-t6", {0,3,14}, {0,18,-22}, 6},
-        {"11-luna-t20", {0,3,14}, {0,18,-22}, 20},
-        {"12-luciernaga-t22", {7.3f,1.7f,5}, {7.8f,1.65f,2}, 22},
-        {"13-luciernaga-t24", {7.3f,1.7f,5}, {7.8f,1.65f,2}, 24},
-        {"14-ofrenda-frente", {-0.8f,1.7f,-15.95f}, {-0.8f,1.0f,-19.25f}, 0},
-        {"15-ofrenda-lateral", {-4.2f,2.0f,-17.3f}, {-0.8f,1.05f,-19.25f}, 0},
-        {"16-alumbrada-superior", {5.0f,6.0f,-14.5f}, {0.0f,0.5f,-18.6f}, 0},
-        {"17-camino-principal", {0,1.7f,3.5f}, {0,3.5f,-5}, 0},
-        {"18-fachada-templo", {0,4.3f,10.6f}, {0,4.1f,-4}, 0},
-        {"19-lateral-templo", {13.5f,5.5f,-7.8f}, {0,3.4f,-8.5f}, 0},
-        {"20-superior-distribucion", {0,57,0.6f}, {0,0,-1}, 0},
-        {"21-ofrenda-frontal", {-0.8f,1.7f,-14.5f}, {-0.8f,1.5f,-19.25f}, 0},
-        {"22-ofrenda-lateral", {-6.6f,3.3f,-17.2f}, {-0.8f,1.45f,-19.25f}, 0},
-        {"23-ofrenda-superior", {-0.8f,9.2f,-19.24f}, {-0.8f,0.1f,-19.25f}, 0},
-        {"24-ofrenda-recorrido", {-3.7f,1.7f,-15.3f}, {-0.8f,1.0f,-19.25f}, 0},
-        {"25-tumba-A", {-8.15f,1.7f,11.4f}, {-10.5f,.8f,8.6f}, 0},
-        {"26-tumba-B", {12.9f,2.0f,5.4f}, {10.45f,1.1f,2}, 0},
-        {"27-tumba-C", {-7.9f,2.3f,-.4f}, {-10.45f,1.0f,-4}, 0}
+    const Viewpoint baseViewpoints[] = {
+        {"01-entrada",{0.0f,1.7f,19.0f},{0.0f,3.0f,-8.0f},0.0f},
+        {"02-atrio",{0.0f,1.7f,11.0f},{0.0f,3.0f,-6.0f},0.0f},
+        {"03-tumbas-izquierda",{-5.1f,1.7f,13.6f},{-6.30000019f,0.9f,12.3000002f},0.0f},
+        {"04-tumbas-derecha",{8.0f,1.7f,4.8f},{8.899999615f,0.9f,3.29999995f},0.0f},
+        {"05-paso-lateral",{-6.2f,1.7f,-7.0f},{-6.2f,1.7f,-16.0f},0.0f},
+        {"06-alumbrada",{0.0f,2.0f,-13.95f},{0.0f,1.0f,-18.5f},0.0f},
+        {"07-distribucion",{29.0f,31.0f,38.0f},{0.0f,0.0f,-2.0f},0.0f},
+        {"08-cuervo-t1",{0.0f,3.0f,13.0f},{0.0f,4.8f,6.0f},1.0f},
+        {"09-cuervo-t3",{0.0f,3.0f,13.0f},{0.0f,4.8f,6.0f},3.0f},
+        {"10-luna-t6",{0.0f,3.0f,14.0f},{0.0f,18.0f,-22.0f},6.0f},
+        {"11-luna-t20",{0.0f,3.0f,14.0f},{0.0f,18.0f,-22.0f},20.0f},
+        {"12-luciernaga-t22",{3.5f,1.7f,5.0f},{4.0f,1.65f,2.0f},22.0f},
+        {"13-luciernaga-t24",{3.5f,1.7f,5.0f},{4.0f,1.65f,2.0f},24.0f},
+        {"14-ofrenda-frente",{-0.8f,1.7f,-15.3f},{-0.8f,1.0f,-19.25f},0.0f},
+        {"15-ofrenda-lateral",{-4.2f,2.0f,-17.3f},{-0.8f,1.05f,-19.25f},0.0f},
+        {"16-alumbrada-superior",{5.0f,6.0f,-14.5f},{0.0f,0.5f,-18.6f},0.0f},
+        {"17-camino-principal",{0.0f,1.7f,3.5f},{0.0f,3.5f,-5.0f},0.0f},
+        {"18-fachada-templo",{0.0f,4.3f,10.6f},{0.0f,4.1f,-4.0f},0.0f},
+        {"19-lateral-templo",{13.5f,5.5f,-7.8f},{0.0f,3.4f,-8.5f},0.0f},
+        {"20-superior-distribucion",{0.0f,57.0f,0.6f},{0.0f,0.0f,-1.0f},0.0f},
+        {"21-ofrenda-frontal",{-0.8f,1.7f,-15.3f},{-0.8f,1.5f,-19.25f},0.0f},
+        {"22-ofrenda-lateral",{-6.6f,3.3f,-17.2f},{-0.8f,1.45f,-19.25f},0.0f},
+        {"23-ofrenda-superior",{-0.8f,9.2f,-19.24f},{-0.8f,0.1f,-19.25f},0.0f},
+        {"24-ofrenda-recorrido",{-3.7f,1.7f,-15.3f},{-0.8f,1.0f,-19.25f},0.0f},
+        {"25-tumba-A",{-9.5f,1.7f,10.8f},{-8.899999615f,0.9f,9.300000175f},0.0f},
+        {"26-tumba-B",{8.0f,1.7f,4.8f},{8.899999615f,0.9f,3.29999995f},0.0f},
+        {"27-tumba-C",{-11.6f,1.7f,16.8f},{-11.60000035f,0.9f,14.9999995f},0.0f},
+    };
+    const Viewpoint expandedViewpoints[] = {
+        {"01-entrada",{0.0f,1.7f,28.0f},{0.0f,4.0f,-9.5f},0.0f},
+        {"02-atrio",{0.0f,1.7f,20.5f},{0.0f,3.0f,-4.285f},0.0f},
+        {"03-tumbas-izquierda",{-5.1f,1.7f,13.6f},{-6.30000019f,0.9f,12.3000002f},0.0f},
+        {"04-tumbas-derecha",{8.0f,1.7f,4.8f},{8.899999615f,0.9f,3.29999995f},0.0f},
+        {"05-paso-lateral",{-6.2f,1.7f,-7.0f},{-6.2f,1.7f,-16.0f},0.0f},
+        {"06-alumbrada",{-0.8f,1.7f,-20.5f},{-0.8f,1.5f,-25.5f},0.0f},
+        {"07-distribucion",{40.0f,44.0f,52.0f},{0.0f,0.0f,-2.0f},0.0f},
+        {"08-cuervo-t1",{0.0f,3.0f,13.0f},{0.0f,4.8f,6.0f},1.0f},
+        {"09-cuervo-t3",{0.0f,3.0f,13.0f},{0.0f,4.8f,6.0f},3.0f},
+        {"10-luna-t6",{0.0f,3.0f,14.0f},{0.0f,18.0f,-22.0f},6.0f},
+        {"11-luna-t20",{0.0f,3.0f,14.0f},{0.0f,18.0f,-22.0f},20.0f},
+        {"12-luciernaga-t22",{3.5f,1.7f,5.0f},{4.0f,1.65f,2.0f},22.0f},
+        {"13-luciernaga-t24",{3.5f,1.7f,5.0f},{4.0f,1.65f,2.0f},24.0f},
+        {"14-ofrenda-frente",{-0.8f,1.7f,-22.0f},{-0.8f,1.0f,-25.5f},0.0f},
+        {"15-ofrenda-lateral",{-4.2f,2.0f,-23.55f},{-0.8f,1.05f,-25.5f},0.0f},
+        {"16-alumbrada-superior",{5.0f,6.0f,-20.75f},{0.0f,0.5f,-24.85f},0.0f},
+        {"17-camino-principal",{0.0f,1.7f,3.5f},{0.0f,3.5f,-5.0f},0.0f},
+        {"18-fachada-templo",{0.0f,4.3f,9.6f},{0.0f,4.1f,-5.0f},0.0f},
+        {"19-lateral-templo",{13.5f,5.5f,-8.8f},{0.0f,3.4f,-9.5f},0.0f},
+        {"20-superior-distribucion",{0.0f,85.0f,0.6f},{0.0f,0.0f,-1.0f},0.0f},
+        {"21-ofrenda-frontal",{-0.8f,1.7f,-20.5f},{-0.8f,1.5f,-25.5f},0.0f},
+        {"22-ofrenda-lateral",{-6.6f,3.3f,-23.45f},{-0.8f,1.45f,-25.5f},0.0f},
+        {"23-ofrenda-superior",{-0.8f,9.2f,-25.49f},{-0.8f,0.1f,-25.5f},0.0f},
+        {"24-ofrenda-recorrido",{-3.7f,1.7f,-21.55f},{-0.8f,1.0f,-25.5f},0.0f},
+        {"25-tumba-A",{-9.5f,1.7f,10.8f},{-8.899999615f,0.9f,9.300000175f},0.0f},
+        {"26-tumba-B",{8.0f,1.7f,4.8f},{8.899999615f,0.9f,3.29999995f},0.0f},
+        {"27-tumba-C",{-11.6f,1.7f,16.8f},{-11.60000035f,0.9f,14.9999995f},0.0f},
+    };
+    const Viewpoint* viewpoints=useExpandedTerrain?expandedViewpoints:baseViewpoints;
+    struct GateView { Viewpoint camera; float angle; };
+    const float openCapture = perimeter ? perimeter->openAngle : 75.f;
+    const GateView perimeterViews[] = {
+        {{"28-acceso-exterior", {0,2.1f,38}, {0,2.2f,29}, 0}, openCapture},
+        {{"29-porton-cerrado", {0,2.1f,38}, {0,2.2f,29}, 0}, 0},
+        {{"30-porton-intermedio", {0,2.1f,38}, {0,2.2f,29}, 0}, openCapture * .5f},
+        {{"31-porton-desde-atrio", {0,1.7f,24}, {0,2.1f,30.5f}, 0}, openCapture},
+        {{"32-esquina-acceso-este", {30,8,37}, {23,0.5f,26}, 0}, openCapture},
+        {{"33-esquina-acceso-oeste", {-30,8,37}, {-23,0.5f,26}, 0}, openCapture},
+        {{"34-esquina-trasera-oeste", {-30,8,-39}, {-23,0.5f,-27}, 0}, openCapture},
+        {{"35-esquina-trasera-este", {30,8,-39}, {23,0.5f,-27}, 0}, openCapture},
+        {{"36-perimetro-completo", {0,100,7}, {0,0,0}, 0}, openCapture},
+        {{"37-alumbrada-muro", {0,2.0f,-21}, {-0.8f,1.2f,-25.5f}, 0}, openCapture}
+    };
+    const int sceneViews = static_cast<int>(sizeof(baseViewpoints) / sizeof(baseViewpoints[0]));
+    const Viewpoint visitorViews[] = {
+        {"38-personaje-neutral", {10.0f,1.7f,9.6f}, {10.8f,.75f,6.1f}, 0},
+        {"39-personaje-inclinado", {10.0f,1.7f,9.6f}, {10.8f,.75f,6.1f}, 0},
+        {"40-personaje-brazo", {10.0f,1.7f,9.6f}, {10.8f,.75f,6.1f}, 0},
+        {"41-personaje-rodillas", {10.0f,1.7f,9.6f}, {10.8f,.75f,6.1f}, 0}
+    };
+    const Viewpoint flowerViews[] = {
+        {"42-flor-inicial", {10.0f,1.7f,9.6f}, {10.8f,.75f,6.1f}, 0},
+        {"43-flor-inclinacion", {10.0f,1.7f,9.6f}, {10.8f,.75f,6.1f}, 1.8f},
+        {"44-flor-rodillas", {10.0f,1.7f,9.6f}, {10.8f,.75f,6.1f}, 3.6f},
+        {"45-flor-extension", {10.0f,1.7f,9.6f}, {10.8f,.75f,6.1f}, 5.8f},
+        {"46-flor-contacto", {10.0f,1.7f,9.6f}, {10.8f,.75f,6.1f}, 6.8f},
+        {"47-flor-retiro", {10.0f,1.7f,9.6f}, {10.8f,.75f,6.1f}, 7.9f},
+        {"48-flor-depositada", {10.0f,1.7f,9.6f}, {10.8f,.75f,6.1f}, 9.3f},
+        {"49-flor-final", {10.0f,1.7f,9.6f}, {10.8f,.75f,6.1f}, 13.5f}
+    };
+    std::vector<Viewpoint> actionViews;
+    if (captureAction)
+        for (const auto& shot : demoAction->tomas)
+            actionViews.push_back({shot.nombre, demoAction->camara, demoAction->objetivo, shot.tiempo});
+    const Viewpoint* visitorShots = captureAction ? actionViews.data() : captureFlower ? flowerViews : visitorViews;
+    std::vector<Viewpoint> ambientViews;
+    if (ambientDemo == ambienteMixquic::Demo::Campana)
+    {
+        const glm::vec3 target = glm::vec3(churchV2.matrix*glm::vec4(-3.16f,5.08f,3.35f,1));
+        const glm::vec3 eye = target+glm::vec3(-.48f,.14f,2.5f);
+        ambientViews = {{"campana-reposo",eye,target,0},{"campana-derecha",eye,target,.7f},
+            {"campana-centro",eye,target,1.4f},{"campana-izquierda",eye,target,2.1f}};
+    }
+    else if (ambientDemo == ambienteMixquic::Demo::Insecto)
+    {
+        const glm::vec3 focus = FireflyPosition(0);
+        const glm::vec3 eye = focus+glm::vec3(.43f,.23f,.32f);
+        ambientViews = {{"insecto-inicio",eye,focus,0},{"insecto-alas-arriba",eye,focus,1.f/18.f},
+            {"insecto-alas-abajo",eye,focus,1.f/6.f},
+            {"insecto-vuelo",FireflyPosition(2.4f)+glm::vec3(.52f,.31f,.7f),FireflyPosition(2.4f),2.4f}};
+    }
+    else if (ambientDemo == ambienteMixquic::Demo::Globos)
+    {
+        const glm::vec3 eye = cantoyaMixquic::OjoDemo, target = cantoyaMixquic::CentroDemo;
+        const auto detalle = cantoyaMixquic::Evaluar(cantoyaMixquic::Rutas.front(),4.f).posicion;
+        ambientViews = {{"globos-00",eye,target,0},{"globos-05",eye,target,5},
+            {"globos-10",eye,target,10},{"globos-24",eye,target,24},
+            {"globos-detalle",detalle+glm::vec3(2,-2.8f,7),detalle+glm::vec3(0,.6f,0),4}};
+        const char* entradas[]={"entrada-00","entrada-05","entrada-10","entrada-24"};
+        const char* cercanas[]={"detalle-00","detalle-05","detalle-10","detalle-24"};
+        const float instantes[]={0,5,10,24};
+        for(size_t i=0;i<4;++i)
+        {
+            const float instante=instantes[i];
+            ambientViews.push_back({entradas[i],{0,EYE_HEIGHT,28},{0,14,-39},instante});
+            // A los 24 s, el primer globo está en su intervalo invisible.
+            const auto& ruta=cantoyaMixquic::Rutas[i==3?2:0];
+            const auto pos=cantoyaMixquic::Evaluar(ruta,instante).posicion;
+            ambientViews.push_back({cercanas[i],pos+glm::vec3(.86f,-.88f,1.8f),pos+glm::vec3(0,.50f,0),instante});
+        }
+    }
+    Viewpoint navViews[] = {
+        {"50-plano-superior", {0,110,6}, {0,0,0}, 0},
+        {"51-recorrido-caminando", {0,1.7f,28}, {0,1.7f,-9.5f}, 1},
+        {"52-recorrido-corriendo", {0,1.7f,28}, {0,1.7f,-9.5f}, 1},
+        {"53-sector-oeste", {-15.5f,2.2f,18.8f}, {-19.3f,2.2f,-2.5f}, 0},
+        {"54-sector-este", {16.8f,2.2f,21.2f}, {20.9f,2.1f,-5.0f}, 0},
+        {"55-alumbrada-contexto", {-9.3f,3.35f,-17.4f}, {-.65f,2.25f,-25.2f}, 0},
+        {"56-copal-t065", {-1.80f,.98f,-23.38f}, {-1.02f,.52f,-25.03f}, .65f},
+        {"57-copal-t280", {-1.80f,.98f,-23.38f}, {-1.02f,.52f,-25.03f}, 2.8f}
+    };
+    const int sceneAndGateViews = sceneViews + (perimeter ? static_cast<int>(sizeof(perimeterViews) / sizeof(perimeterViews[0])) : 0);
+    const int captureViews = captureAmbient ? static_cast<int>(ambientViews.size()) : captureAction ? static_cast<int>(actionViews.size()) : captureFlower ? 8 : captureVisitorPoses ? 4
+        : sceneAndGateViews + (validateNavigation ? static_cast<int>(sizeof(navViews)/sizeof(navViews[0])) : 0);
+    const Viewpoint benchmarkViewpoints[]={
+        {"01-entrada",{0,1.7f,28},{0,4,-9.5f},0},
+        {"07-distribucion",{40,44,52},{0,0,-2},0},
+        {"06-alumbrada",{0,2,-15.2f},{0,1,-25.5f},0}
     };
     int captureIndex = 0;
+    unsigned benchmarkLlamadas=0,benchmarkTriangulos=0;
     const int benchmarkViews[] = { 0,6,5 };
     size_t benchmarkView = 0; int benchmarkFrame = 0;
     std::vector<double> frameTimes;
@@ -1155,11 +1679,13 @@ int main(int argc, char** argv)
     if (benchmark) {
         fps.open(captureDirectory + "/fps.csv");
         if (!fps)return EXIT_FAILURE;
-        fps << "layout,view,width,height,warmup,frames,average_fps,median_ms,p95_ms\n";
+        fps << "layout,view,width,height,warmup,frames,average_fps,median_ms,p95_ms,draw_calls,triangles\n";
     }
     int resultCode = EXIT_SUCCESS;
     if (validate)
     {
+        auto* savedNavigation = walkingNavigation;
+        walkingNavigation = nullptr; // Aqui se comprueba la entrada, aislada de obstaculos.
         // Usar los mismos controles que la sesion normal, mirando hacia arriba:
         // avanzar no debe hacer volar a la camara ni cambiar su altura.
         camera = Camera(glm::vec3(0, EYE_HEIGHT, 19), glm::vec3(0, 1, 0), -90, 30);
@@ -1196,36 +1722,161 @@ int main(int argc, char** argv)
         if (useIglesiaV2 != initialChurch) return EXIT_FAILURE;
         std::cout << "VALIDACION: selector F2 cambia V1/V2 y restaura la seleccion inicial; un solo templo por cuadro." << std::endl;
         std::cout << "VALIDACION: WASD, flechas y mouse; altura peatonal constante." << std::endl;
+        walkingNavigation = savedNavigation;
+    }
+    if (validate && !benchmark && perimeter && !ValidatePerimeterControls(window, *perimeter))
+    {
+        std::cerr << "ERROR: pruebas del porton y camara." << std::endl;
+        resultCode = EXIT_FAILURE;
+    }
+    if (validateNavigation && (!walkingNavigation || !perimeter ||
+        !navigation.ValidarRutas(reducedLayout,*perimeter) ||
+        (mostrarVegetacion && !vegetacion.ValidarTroncos(navigation,*perimeter)) ||
+        !ValidateNavigation4E(window,*perimeter,navigation,navViews[1].eye,navViews[2].eye)))
+        return EXIT_FAILURE;
+    SkyBox skybox;
+    if (useSkybox && !skybox.Load()) resultCode = EXIT_FAILURE;
+    bool verifySkybox = validate && !benchmark;
+    std::ofstream visitorEvidence;
+    if (captureFlower && visitor)
+    {
+        visitorEvidence.open(captureDirectory + "/personaje_matrices.csv");
+        if (!visitorEvidence) return EXIT_FAILURE;
+        visitorEvidence << "t,part,parent,released,m00,m01,m02,m03,m10,m11,m12,m13,m20,m21,m22,m23,m30,m31,m32,m33\n";
+        visitorEvidence << std::setprecision(9);
+    }
+    if (captureAction && !actions.empty())
+    {
+        visitorEvidence.open(captureDirectory + "/personaje_matrices.csv");
+        if (!visitorEvidence) return EXIT_FAILURE;
+        visitorEvidence << "t,part,parent,m00,m01,m02,m03,m10,m11,m12,m13,m20,m21,m22,m23,m30,m31,m32,m33\n";
+        visitorEvidence << std::setprecision(9);
+    }
+    if (validate && visitor)
+    {
+        KeyCallback(window, GLFW_KEY_F6, 0, GLFW_PRESS, 0);
+        KeyCallback(window, GLFW_KEY_F6, 0, GLFW_RELEASE, 0);
+        if (!replayVisitor) return EXIT_FAILURE;
+        replayVisitor = false;
+        const auto first = visitor->Evaluate(0);
+        const auto last = visitor->Evaluate(visitanteDatos::Duration);
+        const auto repeated = visitor->Evaluate(0);
+        if (first.released || !last.released || repeated.released ||
+            glm::length(glm::vec3(first.flower[3] - repeated.flower[3])) > .000001f) return EXIT_FAILURE;
+        std::cout << "VISITANTE REPLAY: F6=OK una_flor=1 reinicio_determinista=1" << std::endl;
     }
     const double animationStart = glfwGetTime();
+    float visitorStart = 0;
+    bool verifyVisitorDraw = validate && !benchmark && visitor != nullptr;
     lastFrame = 0.0f;
 
+    cantoyaMixquic::Faroles cantoya;
+    if (useLanterns && !cantoya.Crear(modeloCantoya))
+    {
+        std::cerr << "ERROR CANTOYA: revisar malla, materiales, envolvente o textura de V2." << std::endl;
+        resultCode = EXIT_FAILURE;
+    }
+    GLuint cantoyaQuery = 0, cantoyaTimer = 0;
+    if (useLanterns && validate && !benchmark) glGenQueries(1,&cantoyaQuery);
+    if (useLanterns && captureAmbient && ambientDemo == ambienteMixquic::Demo::Globos) glGenQueries(1,&cantoyaTimer);
+
+    GLuint vegetacionPrimitivas=0, vegetacionTiempo=0;
+    if (mostrarVegetacion && validate && !benchmark)
+    {
+        glGenQueries(1,&vegetacionPrimitivas);
+        glGenQueries(1,&vegetacionTiempo);
+    }
+
+    alumbrada4g::Perfil perfil(lightingShader.Program);
+    alumbrada4g::Sombras sombras;
+    alumbrada4g::Humo humo;
+    if ((mostrarSombras && (!sombras.Crear(visibleGraves,churchV1,churchV2) ||
+         !sombras.Actualizar(useIglesiaV2,validateNavigation ? captureDirectory+"/profundidad_direccional.pgm" : ""))) ||
+        (mostrarHumo && !humo.Crear()))
+    {
+        std::cerr<<"ERROR ALUMBRADA: no se inicializo el pase de sombras o humo."<<std::endl;
+        resultCode=EXIT_FAILURE;
+    }
+    lightingShader.Use();
+    glUniform1i(glGetUniformLocation(lightingShader.Program,"shadowMap"),alumbrada4g::Sombras::unidad);
+    glUniform1i(glGetUniformLocation(lightingShader.Program,"shadowEnabled"),mostrarSombras);
+    glUniform1i(glGetUniformLocation(lightingShader.Program,"alumbradaEnabled"),cinematica);
+    glUniform1f(glGetUniformLocation(lightingShader.Program,"alumbradaExposure"),alumbrada4g::exposicion);
+    glUniform1f(glGetUniformLocation(lightingShader.Program,"alumbradaEmission"),alumbrada4g::emision);
+    const glm::vec3 copal=glm::vec3(altar.matrix*glm::vec4(-.43f,.38f,.93f,1));
+    std::cout<<"ALUMBRADA PERFIL: modo="<<(cinematica?"alumbrada":"original")<<" sombras="<<mostrarSombras
+        <<" humo="<<mostrarHumo<<" copal="<<copal.x<<","<<copal.y<<","<<copal.z<<std::endl;
+
     // Game loop
-    while (!glfwWindowShouldClose(window))
+    while (resultCode == EXIT_SUCCESS && !glfwWindowShouldClose(window))
     {
         const auto frameStart = std::chrono::steady_clock::now();
         // Calcular deltaTime
         GLfloat currentFrame = static_cast<GLfloat>(glfwGetTime() - animationStart);
-        deltaTime = (std::min)(currentFrame - lastFrame, 0.05f);
+        const float movementTime = glm::clamp(currentFrame - lastFrame,0.f,.25f);
+        deltaTime = (std::min)(movementTime, 0.05f);
         lastFrame = currentFrame;
         GLfloat t = currentFrame;
+        float visitorTime = (std::max)(0.f, currentFrame - visitorStart);
         glfwPollEvents();
         if (validate)
         {
-            const Viewpoint& shot = viewpoints[benchmark ? benchmarkViews[benchmarkView] : captureIndex];
+            const bool navCapture = validateNavigation && captureIndex >= sceneAndGateViews;
+            const bool gateCapture = !benchmark && !captureVisitor && !captureAmbient && !navCapture && captureIndex >= sceneViews;
+            const Viewpoint& shot = captureAmbient ? ambientViews[captureIndex] : captureVisitor ? visitorShots[captureIndex] : benchmark ? benchmarkViewpoints[benchmarkView]
+                : navCapture ? navViews[captureIndex - sceneAndGateViews]
+                : gateCapture ? perimeterViews[captureIndex - sceneViews].camera : viewpoints[captureIndex];
+            if (gateCapture) perimeter->SetCaptureAngle(perimeterViews[captureIndex - sceneViews].angle);
             const glm::vec3 direction = glm::normalize(shot.target - shot.eye);
             camera = Camera(shot.eye, glm::vec3(0, 1, 0), glm::degrees(atan2(direction.z, direction.x)), glm::degrees(asin(direction.y)));
-            t = shot.time;
+            t = captureVisitor ? 0 : shot.time;
+            visitorTime = captureVisitor ? shot.time : t;
         }
-        else DoMovement();
+        else
+        {
+            if (walkingNavigation)
+            {
+                navigation.iglesia = useIglesiaV2 ? churchV2.bounds : churchV1.bounds;
+                navigation.visitantes.clear();
+                if (visitor && showFlower) navigation.visitantes.push_back({10.20f,6.10f});
+                for (const auto& actor : actions)
+                {
+                    glm::vec2 center(actor->pista.raiz.x,actor->pista.raiz.z);
+                    if (actor->pista.gesto == visitanteAcciones::Gesto::Caminar)
+                        center.x += visitanteAcciones::Interpolar(actor->pista.claves,visitorTime).avance;
+                    navigation.visitantes.push_back(center);
+                }
+            }
+            DoMovement(movementTime);
+            if (perimeter) perimeter->Advance(deltaTime, {camera.GetPosition().x, camera.GetPosition().z});
+        }
+
+        if (replayVisitor)
+        {
+            visitorStart = currentFrame;
+            visitorTime = 0;
+            replayVisitor = false;
+        }
+
+        alumbradaMedicion::activo=false;
+        if (mostrarSombras && !sombras.Actualizar(useIglesiaV2,""))
+        {
+            resultCode=EXIT_FAILURE;
+            break;
+        }
+        alumbradaMedicion::llamadas=alumbradaMedicion::triangulos=0;
+        alumbradaMedicion::activo=validate && (!benchmark || benchmarkFrame==30);
 
         // Limpiar buffers
         glClearColor(0.018f, 0.023f, 0.042f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         lightingShader.Use();
+        if (mostrarSombras) sombras.Enlazar(lightingShader);
         glUniform3f(glGetUniformLocation(lightingShader.Program, "objectGlow"), 0, 0, 0);
-        glUniform1f(glGetUniformLocation(lightingShader.Program, "emissionPulse"), 0.94f + 0.06f * sin(t * 8.0f));
+        const GLint pulsoLoc=glGetUniformLocation(lightingShader.Program,"emissionPulse");
+        const float pulso=0.94f+0.06f*sin(t*8.0f);
+        glUniform1f(pulsoLoc,pulso);
 
         GLint viewPosLoc = glGetUniformLocation(lightingShader.Program, "viewPos");
         glUniform3f(viewPosLoc, camera.GetPosition().x, camera.GetPosition().y, camera.GetPosition().z);
@@ -1262,81 +1913,90 @@ int main(int argc, char** argv)
         glUniform3f(glGetUniformLocation(lightingShader.Program, "sun.diffuse"), 0.90f, 0.80f, 0.60f);
         glUniform3f(glGetUniformLocation(lightingShader.Program, "sun.specular"), 0.50f, 0.50f, 0.50f);
 
-        glUniform3f(glGetUniformLocation(lightingShader.Program, "moon.position"), moonPos.x, moonPos.y, moonPos.z);
-        glUniform3f(glGetUniformLocation(lightingShader.Program, "moon.ambient"), 0.007f, 0.009f, 0.016f);
-        glUniform3f(glGetUniformLocation(lightingShader.Program, "moon.diffuse"), 0.025f, 0.035f, 0.065f);
-        glUniform3f(glGetUniformLocation(lightingShader.Program, "moon.specular"), 0.05f, 0.06f, 0.10f);
-
-        // ---------- DIRECCIONAL: Luz ambiental nocturna general
-        glUniform3f(glGetUniformLocation(lightingShader.Program, "dirLight.direction"), -0.2f, -1.0f, -0.3f);
-        glUniform3f(glGetUniformLocation(lightingShader.Program, "dirLight.ambient"), 0.045f, 0.05f, 0.07f);
-        glUniform3f(glGetUniformLocation(lightingShader.Program, "dirLight.diffuse"), 0.045f, 0.055f, 0.09f);
-        glUniform3f(glGetUniformLocation(lightingShader.Program, "dirLight.specular"), 0.04f, 0.045f, 0.065f);
-
-        // ---------- PUNTUAL 1: FOGATA para cantar la cancion de la hoguera
         float parpadeoFogata = 0.85f + 0.10f * sin(t * 11.0f) * sin(t * 5.3f) + 0.05f * sin(t * 27.0f);
-        glUniform3f(glGetUniformLocation(lightingShader.Program, "pointLights[0].position"), pointLightPositions[0].x, pointLightPositions[0].y, pointLightPositions[0].z);
-        glUniform3f(glGetUniformLocation(lightingShader.Program, "pointLights[0].ambient"), 0.15f * parpadeoFogata, 0.07f * parpadeoFogata, 0.015f * parpadeoFogata);
-        glUniform3f(glGetUniformLocation(lightingShader.Program, "pointLights[0].diffuse"), 2.4f * parpadeoFogata, 1.15f * parpadeoFogata, 0.30f * parpadeoFogata);
-        glUniform3f(glGetUniformLocation(lightingShader.Program, "pointLights[0].specular"), 0.6f * parpadeoFogata, 0.3f * parpadeoFogata, 0.1f * parpadeoFogata);
-        glUniform1f(glGetUniformLocation(lightingShader.Program, "pointLights[0].constant"), 1.0f);
-        glUniform1f(glGetUniformLocation(lightingShader.Program, "pointLights[0].linear"), 0.07f);
-        glUniform1f(glGetUniformLocation(lightingShader.Program, "pointLights[0].quadratic"), 0.017f);
-
-        // ---------- PUNTUAL 2: VELA1
         float parpadeoVela = 0.90f + 0.06f * sin(t * 9.0f) + 0.04f * sin(t * 23.0f);
-        glUniform3f(glGetUniformLocation(lightingShader.Program, "pointLights[1].position"), pointLightPositions[1].x, pointLightPositions[1].y, pointLightPositions[1].z);
-        glUniform3f(glGetUniformLocation(lightingShader.Program, "pointLights[1].ambient"), 0.10f * parpadeoVela, 0.07f * parpadeoVela, 0.03f * parpadeoVela);
-        glUniform3f(glGetUniformLocation(lightingShader.Program, "pointLights[1].diffuse"), 2.8f * parpadeoVela, 1.7f * parpadeoVela, 0.7f * parpadeoVela);
-        glUniform3f(glGetUniformLocation(lightingShader.Program, "pointLights[1].specular"), 0.3f * parpadeoVela, 0.2f * parpadeoVela, 0.1f * parpadeoVela);
-        glUniform1f(glGetUniformLocation(lightingShader.Program, "pointLights[1].constant"), 1.0f);
-        glUniform1f(glGetUniformLocation(lightingShader.Program, "pointLights[1].linear"), 0.07f);
-        glUniform1f(glGetUniformLocation(lightingShader.Program, "pointLights[1].quadratic"), 0.017f);
-
-        // ---------- PUNTUAL 3: MOSKA
         float destelloLuc = 0.5f + 0.5f * sin(t * 3.0f);
         destelloLuc = destelloLuc * destelloLuc;
-        glUniform3f(glGetUniformLocation(lightingShader.Program, "pointLights[2].position"), pointLightPositions[2].x, pointLightPositions[2].y, pointLightPositions[2].z);
-        glUniform3f(glGetUniformLocation(lightingShader.Program, "pointLights[2].ambient"), 0.05f * destelloLuc, 0.12f * destelloLuc, 0.02f * destelloLuc);
-        glUniform3f(glGetUniformLocation(lightingShader.Program, "pointLights[2].diffuse"), 0.45f * destelloLuc, 1.0f * destelloLuc, 0.15f * destelloLuc);
-        glUniform3f(glGetUniformLocation(lightingShader.Program, "pointLights[2].specular"), 0.3f * destelloLuc, 0.6f * destelloLuc, 0.1f * destelloLuc);
-        glUniform1f(glGetUniformLocation(lightingShader.Program, "pointLights[2].constant"), 1.0f);
-        glUniform1f(glGetUniformLocation(lightingShader.Program, "pointLights[2].linear"), 0.35f);
-        glUniform1f(glGetUniformLocation(lightingShader.Program, "pointLights[2].quadratic"), 0.44f);
-
-        // ---------- PUNTUAL 4: FAROL
         float titileoFarol = 0.97f + 0.03f * sin(t * 7.0f);
-        glUniform3f(glGetUniformLocation(lightingShader.Program, "pointLights[3].position"), pointLightPositions[3].x, pointLightPositions[3].y, pointLightPositions[3].z);
-        glUniform3f(glGetUniformLocation(lightingShader.Program, "pointLights[3].ambient"), 0.08f * titileoFarol, 0.06f * titileoFarol, 0.03f * titileoFarol);
-        glUniform3f(glGetUniformLocation(lightingShader.Program, "pointLights[3].diffuse"), 2.0f * titileoFarol, 1.45f * titileoFarol, 0.65f * titileoFarol);
-        glUniform3f(glGetUniformLocation(lightingShader.Program, "pointLights[3].specular"), 0.4f * titileoFarol, 0.3f * titileoFarol, 0.15f * titileoFarol);
-        glUniform1f(glGetUniformLocation(lightingShader.Program, "pointLights[3].constant"), 1.0f);
-        glUniform1f(glGetUniformLocation(lightingShader.Program, "pointLights[3].linear"), 0.07f);
-        glUniform1f(glGetUniformLocation(lightingShader.Program, "pointLights[3].quadratic"), 0.017f);
-
-        // ---------- PUNTUAL 5: VELADORA2
         float parpadeoVeladora = 0.88f + 0.08f * sin(t * 8.0f + 1.3f) + 0.04f * sin(t * 21.0f);
-        glUniform3f(glGetUniformLocation(lightingShader.Program, "pointLights[4].position"), pointLightPositions[4].x, pointLightPositions[4].y, pointLightPositions[4].z);
-        glUniform3f(glGetUniformLocation(lightingShader.Program, "pointLights[4].ambient"), 0.08f * parpadeoVeladora, 0.03f * parpadeoVeladora, 0.01f * parpadeoVeladora);
-        glUniform3f(glGetUniformLocation(lightingShader.Program, "pointLights[4].diffuse"), 3.5f * parpadeoVeladora, 2.0f * parpadeoVeladora, 0.55f * parpadeoVeladora);
-        glUniform3f(glGetUniformLocation(lightingShader.Program, "pointLights[4].specular"), 0.3f * parpadeoVeladora, 0.15f * parpadeoVeladora, 0.05f * parpadeoVeladora);
-        glUniform1f(glGetUniformLocation(lightingShader.Program, "pointLights[4].constant"), 1.0f);
-        glUniform1f(glGetUniformLocation(lightingShader.Program, "pointLights[4].linear"), 0.045f);
-        glUniform1f(glGetUniformLocation(lightingShader.Program, "pointLights[4].quadratic"), 0.0075f);
+        if (cinematica)
+        {
+            const float pulsos[]={parpadeoFogata,parpadeoVela,destelloLuc,titileoFarol,parpadeoVeladora};
+            perfil.Aplicar(moonPos,pointLightPositions,pulsos,camera.GetPosition(),camera.GetFront());
+        }
+        else
+        {
+            glUniform3f(glGetUniformLocation(lightingShader.Program, "moon.position"), moonPos.x, moonPos.y, moonPos.z);
+            glUniform3f(glGetUniformLocation(lightingShader.Program, "moon.ambient"), 0.007f, 0.009f, 0.016f);
+            glUniform3f(glGetUniformLocation(lightingShader.Program, "moon.diffuse"), 0.025f, 0.035f, 0.065f);
+            glUniform3f(glGetUniformLocation(lightingShader.Program, "moon.specular"), 0.05f, 0.06f, 0.10f);
 
-        // ---------- SPOTLIGHT -->Linterna de la camara 
-        glUniform3f(glGetUniformLocation(lightingShader.Program, "spotLight.position"), camera.GetPosition().x, camera.GetPosition().y, camera.GetPosition().z);
-        glUniform3f(glGetUniformLocation(lightingShader.Program, "spotLight.direction"), camera.GetFront().x, camera.GetFront().y, camera.GetFront().z);
-        glUniform3f(glGetUniformLocation(lightingShader.Program, "spotLight.ambient"), 0.025f, 0.022f, 0.018f);
-        glUniform3f(glGetUniformLocation(lightingShader.Program, "spotLight.diffuse"), 0.85f, 0.75f, 0.55f);
-        glUniform3f(glGetUniformLocation(lightingShader.Program, "spotLight.specular"), 0.2f, 0.2f, 0.2f);
-        glUniform1f(glGetUniformLocation(lightingShader.Program, "spotLight.constant"), 1.0f);
-        glUniform1f(glGetUniformLocation(lightingShader.Program, "spotLight.linear"), 0.09f);
-        glUniform1f(glGetUniformLocation(lightingShader.Program, "spotLight.quadratic"), 0.032f);
-        glUniform1f(glGetUniformLocation(lightingShader.Program, "spotLight.cutOff"), glm::cos(glm::radians(12.0f)));
-        glUniform1f(glGetUniformLocation(lightingShader.Program, "spotLight.outerCutOff"), glm::cos(glm::radians(18.0f)));
+            // ---------- DIRECCIONAL: Luz ambiental nocturna general
+            glUniform3f(glGetUniformLocation(lightingShader.Program, "dirLight.direction"), -0.2f, -1.0f, -0.3f);
+            glUniform3f(glGetUniformLocation(lightingShader.Program, "dirLight.ambient"), 0.045f, 0.05f, 0.07f);
+            glUniform3f(glGetUniformLocation(lightingShader.Program, "dirLight.diffuse"), 0.045f, 0.055f, 0.09f);
+            glUniform3f(glGetUniformLocation(lightingShader.Program, "dirLight.specular"), 0.04f, 0.045f, 0.065f);
 
-        // Matrices de vista y proyeccion
+            // ---------- PUNTUAL 1: FOGATA para cantar la cancion de la hoguera
+            glUniform3f(glGetUniformLocation(lightingShader.Program, "pointLights[0].position"), pointLightPositions[0].x, pointLightPositions[0].y, pointLightPositions[0].z);
+            glUniform3f(glGetUniformLocation(lightingShader.Program, "pointLights[0].ambient"), 0.15f * parpadeoFogata, 0.07f * parpadeoFogata, 0.015f * parpadeoFogata);
+            glUniform3f(glGetUniformLocation(lightingShader.Program, "pointLights[0].diffuse"), 2.4f * parpadeoFogata, 1.15f * parpadeoFogata, 0.30f * parpadeoFogata);
+            glUniform3f(glGetUniformLocation(lightingShader.Program, "pointLights[0].specular"), 0.6f * parpadeoFogata, 0.3f * parpadeoFogata, 0.1f * parpadeoFogata);
+            glUniform1f(glGetUniformLocation(lightingShader.Program, "pointLights[0].constant"), 1.0f);
+            glUniform1f(glGetUniformLocation(lightingShader.Program, "pointLights[0].linear"), 0.07f);
+            glUniform1f(glGetUniformLocation(lightingShader.Program, "pointLights[0].quadratic"), 0.017f);
+
+            // ---------- PUNTUAL 2: VELA1
+            glUniform3f(glGetUniformLocation(lightingShader.Program, "pointLights[1].position"), pointLightPositions[1].x, pointLightPositions[1].y, pointLightPositions[1].z);
+            glUniform3f(glGetUniformLocation(lightingShader.Program, "pointLights[1].ambient"), 0.10f * parpadeoVela, 0.07f * parpadeoVela, 0.03f * parpadeoVela);
+            glUniform3f(glGetUniformLocation(lightingShader.Program, "pointLights[1].diffuse"), 2.8f * parpadeoVela, 1.7f * parpadeoVela, 0.7f * parpadeoVela);
+            glUniform3f(glGetUniformLocation(lightingShader.Program, "pointLights[1].specular"), 0.3f * parpadeoVela, 0.2f * parpadeoVela, 0.1f * parpadeoVela);
+            glUniform1f(glGetUniformLocation(lightingShader.Program, "pointLights[1].constant"), 1.0f);
+            glUniform1f(glGetUniformLocation(lightingShader.Program, "pointLights[1].linear"), 0.07f);
+            glUniform1f(glGetUniformLocation(lightingShader.Program, "pointLights[1].quadratic"), 0.017f);
+
+            // ---------- PUNTUAL 3: MOSKA
+            glUniform3f(glGetUniformLocation(lightingShader.Program, "pointLights[2].position"), pointLightPositions[2].x, pointLightPositions[2].y, pointLightPositions[2].z);
+            glUniform3f(glGetUniformLocation(lightingShader.Program, "pointLights[2].ambient"), 0.05f * destelloLuc, 0.12f * destelloLuc, 0.02f * destelloLuc);
+            glUniform3f(glGetUniformLocation(lightingShader.Program, "pointLights[2].diffuse"), 0.45f * destelloLuc, 1.0f * destelloLuc, 0.15f * destelloLuc);
+            glUniform3f(glGetUniformLocation(lightingShader.Program, "pointLights[2].specular"), 0.3f * destelloLuc, 0.6f * destelloLuc, 0.1f * destelloLuc);
+            glUniform1f(glGetUniformLocation(lightingShader.Program, "pointLights[2].constant"), 1.0f);
+            glUniform1f(glGetUniformLocation(lightingShader.Program, "pointLights[2].linear"), 0.35f);
+            glUniform1f(glGetUniformLocation(lightingShader.Program, "pointLights[2].quadratic"), 0.44f);
+
+            // ---------- PUNTUAL 4: FAROL
+            glUniform3f(glGetUniformLocation(lightingShader.Program, "pointLights[3].position"), pointLightPositions[3].x, pointLightPositions[3].y, pointLightPositions[3].z);
+            glUniform3f(glGetUniformLocation(lightingShader.Program, "pointLights[3].ambient"), 0.08f * titileoFarol, 0.06f * titileoFarol, 0.03f * titileoFarol);
+            glUniform3f(glGetUniformLocation(lightingShader.Program, "pointLights[3].diffuse"), 2.0f * titileoFarol, 1.45f * titileoFarol, 0.65f * titileoFarol);
+            glUniform3f(glGetUniformLocation(lightingShader.Program, "pointLights[3].specular"), 0.4f * titileoFarol, 0.3f * titileoFarol, 0.15f * titileoFarol);
+            glUniform1f(glGetUniformLocation(lightingShader.Program, "pointLights[3].constant"), 1.0f);
+            glUniform1f(glGetUniformLocation(lightingShader.Program, "pointLights[3].linear"), 0.07f);
+            glUniform1f(glGetUniformLocation(lightingShader.Program, "pointLights[3].quadratic"), 0.017f);
+
+            // ---------- PUNTUAL 5: VELADORA2
+            glUniform3f(glGetUniformLocation(lightingShader.Program, "pointLights[4].position"), pointLightPositions[4].x, pointLightPositions[4].y, pointLightPositions[4].z);
+            glUniform3f(glGetUniformLocation(lightingShader.Program, "pointLights[4].ambient"), 0.08f * parpadeoVeladora, 0.03f * parpadeoVeladora, 0.01f * parpadeoVeladora);
+            glUniform3f(glGetUniformLocation(lightingShader.Program, "pointLights[4].diffuse"), 3.5f * parpadeoVeladora, 2.0f * parpadeoVeladora, 0.55f * parpadeoVeladora);
+            glUniform3f(glGetUniformLocation(lightingShader.Program, "pointLights[4].specular"), 0.3f * parpadeoVeladora, 0.15f * parpadeoVeladora, 0.05f * parpadeoVeladora);
+            glUniform1f(glGetUniformLocation(lightingShader.Program, "pointLights[4].constant"), 1.0f);
+            glUniform1f(glGetUniformLocation(lightingShader.Program, "pointLights[4].linear"), 0.045f);
+            glUniform1f(glGetUniformLocation(lightingShader.Program, "pointLights[4].quadratic"), 0.0075f);
+
+            // ---------- SPOTLIGHT -->Linterna de la camara
+            glUniform3f(glGetUniformLocation(lightingShader.Program, "spotLight.position"), camera.GetPosition().x, camera.GetPosition().y, camera.GetPosition().z);
+            glUniform3f(glGetUniformLocation(lightingShader.Program, "spotLight.direction"), camera.GetFront().x, camera.GetFront().y, camera.GetFront().z);
+            glUniform3f(glGetUniformLocation(lightingShader.Program, "spotLight.ambient"), 0.025f, 0.022f, 0.018f);
+            glUniform3f(glGetUniformLocation(lightingShader.Program, "spotLight.diffuse"), 0.85f, 0.75f, 0.55f);
+            glUniform3f(glGetUniformLocation(lightingShader.Program, "spotLight.specular"), 0.2f, 0.2f, 0.2f);
+            glUniform1f(glGetUniformLocation(lightingShader.Program, "spotLight.constant"), 1.0f);
+            glUniform1f(glGetUniformLocation(lightingShader.Program, "spotLight.linear"), 0.09f);
+            glUniform1f(glGetUniformLocation(lightingShader.Program, "spotLight.quadratic"), 0.032f);
+            glUniform1f(glGetUniformLocation(lightingShader.Program, "spotLight.cutOff"), glm::cos(glm::radians(12.0f)));
+            glUniform1f(glGetUniformLocation(lightingShader.Program, "spotLight.outerCutOff"), glm::cos(glm::radians(18.0f)));
+
+            // Matrices de vista y proyeccion
+        }
+
         glm::mat4 view = camera.GetViewMatrix();
         GLint modelLoc = glGetUniformLocation(lightingShader.Program, "model");
         GLint viewLoc = glGetUniformLocation(lightingShader.Program, "view");
@@ -1346,17 +2006,69 @@ int main(int argc, char** argv)
         glUniformMatrix4fv(projLoc, 1, GL_FALSE, glm::value_ptr(projection));
 
         // ZONAS 1-4: el OBJ piso conserva su geometria, con concreto existente en vez de pasto.
-        glUniform2f(glGetUniformLocation(lightingShader.Program, "textureTiling"), 17.0f, 21.0f);
+        glUniform2f(glGetUniformLocation(lightingShader.Program, "textureTiling"), useExpandedTerrain?25.0f:17.0f, useExpandedTerrain?32.0f:21.0f);
         DrawPlacement(ground, lightingShader, concreteTexture);
         glUniform2f(glGetUniformLocation(lightingShader.Program, "textureTiling"), 1.0f, 1.0f);
         for (const Surface& surface : surfaces) DrawSurface(surface, VAO, lightingShader);
-        DrawPlacement(useIglesiaV2 ? churchV2 : churchV1, lightingShader);
+        if(unifiedPaving)DrawPlacement(paving,lightingShader);
+        if (articulatedAmbient && useIglesiaV2) ambiental.DibujarTemplo(iglesiaV2,churchV2.matrix,lightingShader,t);
+        else DrawPlacement(useIglesiaV2 ? churchV2 : churchV1, lightingShader);
         // ZONA 5 y tumba principal de ZONA 6: tres instancias base reutilizadas.
-        for (const Placement& grave : graves) DrawPlacement(grave, lightingShader);
+        for (const Placement& grave : visibleGraves) DrawPlacement(grave, lightingShader);
         for (const Placement& decoration : decorations) DrawPlacement(decoration, lightingShader);
         for (const auto& prop : attached) DrawPlacement(prop.item, lightingShader);
         DrawPlacement(perchedCrow, lightingShader);
         DrawPlacement(altar, lightingShader);
+        if (visitor && showFlower)
+        {
+            GLuint primitiveQuery = 0;
+            if (verifyVisitorDraw)
+            {
+                glGenQueries(1, &primitiveQuery);
+                glBeginQuery(GL_PRIMITIVES_GENERATED, primitiveQuery);
+            }
+            if (playFlower && !captureVisitorPoses) visitor->DrawAnimation(lightingShader, visitorTime);
+            else visitor->Draw(lightingShader, captureVisitorPoses ? captureIndex : visitorPose);
+            if (verifyVisitorDraw)
+            {
+                glEndQuery(GL_PRIMITIVES_GENERATED);
+                GLuint primitives = 0;
+                glGetQueryObjectuiv(primitiveQuery, GL_QUERY_RESULT, &primitives);
+                glDeleteQueries(1, &primitiveQuery);
+                std::cout << "VISITANTE GPU: triangulos_generados=" << primitives
+                    << " draw_calls=" << visitor->LastDrawCalls() << std::endl;
+                if (primitives != 4577 || visitor->LastDrawCalls() != 44) return EXIT_FAILURE;
+                verifyVisitorDraw = false;
+            }
+        }
+
+        if (!actions.empty())
+        {
+            const bool queryAction = validate && !benchmark && (captureAction || captureIndex == 0);
+            GLuint actionQuery = 0;
+            if (queryAction)
+            {
+                glGenQueries(1, &actionQuery);
+                glBeginQuery(GL_PRIMITIVES_GENERATED, actionQuery);
+            }
+            visitanteAcciones::Cuenta total;
+            for (const auto& actor : actions)
+            {
+                const auto count = actor->Dibujar(lightingShader, visitorTime);
+                total.llamadas += count.llamadas;
+                total.triangulos += count.triangulos;
+            }
+            if (queryAction)
+            {
+                glEndQuery(GL_PRIMITIVES_GENERATED);
+                GLuint count = 0;
+                glGetQueryObjectuiv(actionQuery, GL_QUERY_RESULT, &count);
+                glDeleteQueries(1, &actionQuery);
+                if (count != total.triangulos) return EXIT_FAILURE;
+                std::cout << "VISITANTE GPU ACCIONES: t=" << visitorTime << " rigs=" << actions.size()
+                    << " triangulos_generados=" << count << " draw_calls=" << total.llamadas << std::endl;
+            }
+        }
 
         // El Sol y su animacion se conservan; la version nocturna solo presenta la Luna.
         if (!ESCENA_NOCTURNA)
@@ -1379,7 +2091,8 @@ int main(int argc, char** argv)
         glm::mat4 modelLuciernaga = FireflyMatrix(t);
         glUniform3f(glGetUniformLocation(lightingShader.Program, "objectGlow"), 0.08f, 0.2f, 0.02f);
         glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(modelLuciernaga));
-        luciernaga.Draw(lightingShader);
+        if (articulatedAmbient) ambiental.DibujarInsecto(luciernaga,modelLuciernaga,lightingShader,t);
+        else luciernaga.Draw(lightingShader);
         glUniform3f(glGetUniformLocation(lightingShader.Program, "objectGlow"), 0, 0, 0);
 
         // Vuelo y aleteo originales, trasladados al atrio: no cruzan el templo.
@@ -1399,6 +2112,73 @@ int main(int argc, char** argv)
         // glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(modelHongo));
         // hongo.Draw(lightingShader);
 
+        const bool contarGlobos = validate && !benchmark && captureIndex < (ambientDemo == ambienteMixquic::Demo::Globos ? captureViews : 1);
+        unsigned globosVisibles = 0;
+        if (useLanterns)
+        {
+            if (contarGlobos) glBeginQuery(GL_PRIMITIVES_GENERATED,cantoyaQuery);
+            if (cantoyaTimer && contarGlobos) glBeginQuery(GL_TIME_ELAPSED,cantoyaTimer);
+            globosVisibles = cantoya.Dibujar(lightingShader,modelLoc,t,pulsoLoc,pulso);
+            if (cantoyaTimer && contarGlobos) glEndQuery(GL_TIME_ELAPSED);
+            if (contarGlobos) glEndQuery(GL_PRIMITIVES_GENERATED);
+        }
+        if (contarGlobos)
+        {
+            GLuint triangulos = 0;
+            if (useLanterns) glGetQueryObjectuiv(cantoyaQuery,GL_QUERY_RESULT,&triangulos);
+            const unsigned esperado = useLanterns ? globosVisibles*cantoya.TriangulosPorGlobo() : 0;
+            if (triangulos != esperado || glGetError() != GL_NO_ERROR)
+            {
+                std::cerr << "ERROR CANTOYA: el conteo OpenGL no coincide con la malla." << std::endl;
+                resultCode = EXIT_FAILURE;
+                break;
+            }
+            if (cantoyaTimer && globosVisibles)
+            {
+                GLuint64 ns=0;
+                glGetQueryObjectui64v(cantoyaTimer,GL_QUERY_RESULT,&ns);
+                std::cout << "CANTOYA TIEMPO: " << ambientViews[captureIndex].name << " gpu_ns=" << ns << std::endl;
+            }
+            std::cout << "CANTOYA GPU: t=" << t << " instancias=" << globosVisibles
+                << " dibujos=" << globosVisibles*cantoya.DibujosPorGlobo() << " triangulos=" << triangulos << std::endl;
+        }
+        if (mostrarVegetacion)
+        {
+            if (vegetacionPrimitivas)
+            {
+                glBeginQuery(GL_PRIMITIVES_GENERATED,vegetacionPrimitivas);
+                glBeginQuery(GL_TIME_ELAPSED,vegetacionTiempo);
+            }
+            const auto conteo=vegetacion.Dibujar(lightingShader,modelLoc,projection*view);
+            if (vegetacionPrimitivas)
+            {
+                glEndQuery(GL_TIME_ELAPSED);
+                glEndQuery(GL_PRIMITIVES_GENERATED);
+                GLuint triangulos=0;
+                GLuint64 nanos=0;
+                glGetQueryObjectuiv(vegetacionPrimitivas,GL_QUERY_RESULT,&triangulos);
+                glGetQueryObjectui64v(vegetacionTiempo,GL_QUERY_RESULT,&nanos);
+                if (triangulos!=conteo.triangulos)
+                {
+                    std::cerr<<"ERROR VEGETACION: OpenGL y el conteo por instancia difieren."<<std::endl;
+                    resultCode=EXIT_FAILURE;
+                    break;
+                }
+                std::cout<<"VEGETACION GPU: vista="<<captureIndex<<" llamadas="<<conteo.llamadas
+                    <<" triangulos="<<triangulos<<" gpu_ns="<<nanos<<std::endl;
+            }
+        }
+        if (perimeter) perimeter->Draw(lightingShader, projection * view);
+
+        // El cielo ocupa el fondo que dejaron los opacos. Se dibuja antes de transparencias.
+        if (useSkybox && !skybox.Draw(view, projection, verifySkybox))
+        {
+            std::cerr << "ERROR SKYBOX: el sampler no usa el cubemap cargado." << std::endl;
+            resultCode = EXIT_FAILURE;
+            break;
+        }
+        verifySkybox = false;
+
         // 5. DIBUJO DE MODELOS CON TRANSPARENCIA-->Siempre al final del ciclo
 
         // TODO: Reactivar junto con la carga de Models/TumbaTransparente.obj.
@@ -1415,6 +2195,7 @@ int main(int argc, char** argv)
         // glDisable(GL_BLEND);
         // Importante: regresamos transparency a 0 para no afectar el siguiente frame
         // glUniform1i(glGetUniformLocation(lightingShader.Program, "transparency"), 0);
+        if (mostrarHumo) humo.Dibujar(copal,t,view,projection);
         glBindVertexArray(0);
 
         if (validate)
@@ -1428,6 +2209,11 @@ int main(int argc, char** argv)
             }
             if (benchmark) {
                 const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - frameStart).count();
+                if (benchmarkFrame == 30)
+                {
+                    benchmarkLlamadas=alumbradaMedicion::llamadas;
+                    benchmarkTriangulos=alumbradaMedicion::triangulos;
+                }
                 if (benchmarkFrame >= 30)frameTimes.push_back(ms);
                 if (++benchmarkFrame == 150) {
                     double sum = 0; for (double v : frameTimes)sum += v;
@@ -1436,7 +2222,8 @@ int main(int argc, char** argv)
                     fps << (useNewLayout ? "nueva" : "anterior") << "," << viewpoints[benchmarkViews[benchmarkView]].name
                         << "," << SCREEN_WIDTH << "," << SCREEN_HEIGHT << ",30," << frameTimes.size() << ","
                         << std::fixed << std::setprecision(3) << average << "," << frameTimes[frameTimes.size() / 2]
-                        << "," << frameTimes[static_cast<size_t>(.95 * (frameTimes.size() - 1))] << "\n";
+                        << "," << frameTimes[static_cast<size_t>(.95 * (frameTimes.size() - 1))]
+                        << "," << benchmarkLlamadas << "," << benchmarkTriangulos << "\n";
                     fps.flush();
                     std::cout << "FPS: " << viewpoints[benchmarkViews[benchmarkView]].name << " " << average << std::endl;
                     frameTimes.clear(); benchmarkFrame = 0;
@@ -1444,19 +2231,45 @@ int main(int argc, char** argv)
                 }
             }
             else {
-                const std::string output = captureDirectory + "/" + viewpoints[captureIndex].name + ".bmp";
+                const char* captureName = captureAmbient ? ambientViews[captureIndex].name : captureVisitor ? visitorShots[captureIndex].name : captureIndex < sceneViews ? viewpoints[captureIndex].name
+                    : captureIndex < sceneAndGateViews ? perimeterViews[captureIndex - sceneViews].camera.name
+                    : navViews[captureIndex - sceneAndGateViews].name;
+                const std::string output = captureDirectory + "/" + captureName + ".bmp";
+                if (captureFlower && visitor) visitor->WriteEvidence(visitorEvidence, visitorTime);
+                if (captureAction && !actions.empty()) actions.front()->Evidencia(visitorEvidence, visitorTime);
+                if (captureAmbient)
+                {
+                    const glm::vec3 fly = FireflyPosition(t);
+                    std::cout << "AMBIENTE MUESTRA: t=" << t
+                        << " campana=" << (articulatedAmbient ? ambienteMixquic::CampanaInsecto::AnguloCampana(t) : 0)
+                        << " ala=" << (articulatedAmbient ? ambienteMixquic::CampanaInsecto::AnguloAla(t) : 0)
+                        << " insecto=" << fly.x << "," << fly.y << "," << fly.z << std::endl;
+                }
                 if (!CaptureFrame(output))
                 {
                     std::cerr << "ERROR: captura " << output << std::endl; resultCode = EXIT_FAILURE; break;
                 }
-                std::cout << "CAPTURA: " << output << " t=" << t << std::endl;
+                std::cout<<"ALUMBRADA CUADRO: vista="<<captureName<<" llamadas="<<alumbradaMedicion::llamadas
+                    <<" triangulos="<<alumbradaMedicion::triangulos<<std::endl;
+                std::cout << "CAPTURA: " << output << " t=" << t << " personaje_t=" << visitorTime << std::endl;
                 ++captureIndex;
-                if (captureIndex == sizeof(viewpoints) / sizeof(viewpoints[0])) glfwSetWindowShouldClose(window, GL_TRUE);
+                if (captureIndex == captureViews) glfwSetWindowShouldClose(window, GL_TRUE);
             }
         }
         glfwSwapBuffers(window);
     }
 
+    walkingPerimeter = nullptr;
+    walkingNavigation = nullptr;
+    if (vegetacionPrimitivas) glDeleteQueries(1,&vegetacionPrimitivas);
+    if (vegetacionTiempo) glDeleteQueries(1,&vegetacionTiempo);
+    if (cantoyaTimer) glDeleteQueries(1,&cantoyaTimer);
+    if (cantoyaQuery) glDeleteQueries(1,&cantoyaQuery);
+    cantoya.Liberar();
+    ambiental.Liberar();
+    humo.Liberar();
+    sombras.Liberar();
+    skybox.Release();
     glDeleteTextures(1, &concreteTexture);
     glDeleteVertexArrays(1, &VAO);
     glDeleteBuffers(1, &VBO);
@@ -1465,16 +2278,26 @@ int main(int argc, char** argv)
 }
 
 // Movimiento de camara y objetos por teclado
-void DoMovement()
+void DoMovement(float seconds)
 {
-    if (keys[GLFW_KEY_W] || keys[GLFW_KEY_UP])
-        camera.ProcessKeyboard(FORWARD, deltaTime);
-    if (keys[GLFW_KEY_S] || keys[GLFW_KEY_DOWN])
-        camera.ProcessKeyboard(BACKWARD, deltaTime);
-    if (keys[GLFW_KEY_A] || keys[GLFW_KEY_LEFT])
-        camera.ProcessKeyboard(LEFT, deltaTime);
-    if (keys[GLFW_KEY_D] || keys[GLFW_KEY_RIGHT])
-        camera.ProcessKeyboard(RIGHT, deltaTime);
+    const glm::vec3 before = camera.GetPosition();
+    const glm::vec3 direction = camera.GetFront();
+    const glm::vec2 front = glm::normalize(glm::vec2(direction.x,direction.z));
+    const glm::vec2 right(-front.y,front.x);
+    const float forward = float(keys[GLFW_KEY_W] || keys[GLFW_KEY_UP]) - float(keys[GLFW_KEY_S] || keys[GLFW_KEY_DOWN]);
+    const float lateral = float(keys[GLFW_KEY_D] || keys[GLFW_KEY_RIGHT]) - float(keys[GLFW_KEY_A] || keys[GLFW_KEY_LEFT]);
+    const glm::vec2 input = front*forward + right*lateral;
+    if (glm::dot(input,input) > 0)
+    {
+        const float speed = 3.5f * ((keys[GLFW_KEY_LEFT_SHIFT] || keys[GLFW_KEY_RIGHT_SHIFT]) ? 1.7f : 1.f);
+        const float elapsed = seconds >= 0 ? seconds : deltaTime;
+        const glm::vec2 from(before.x,before.z);
+        const glm::vec2 bounds(useExpandedTerrain ? 24.65f : 16.65f,useExpandedTerrain ? 31.65f : 20.65f);
+        const glm::vec2 to = glm::clamp(from + glm::normalize(input)*(speed*elapsed),-bounds,bounds);
+        const glm::vec2 safe = walkingNavigation ? walkingNavigation->Desplazar(from,to,walkingPerimeter)
+            : walkingPerimeter ? walkingPerimeter->ResolveMotion(from,to) : to;
+        camera.SetWalkingXZ(safe.x,safe.y);
+    }
 
     // Mover posFogata (y su luz puntual [0] automaticamente) con T,G,Y,H,U,J
     if (keys[GLFW_KEY_T]) posFogata.x += 1.5f * deltaTime;
@@ -1494,6 +2317,8 @@ void DoMovement()
 void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mode)
 {
     if (GLFW_KEY_ESCAPE == key && GLFW_PRESS == action)glfwSetWindowShouldClose(window, GL_TRUE);
+    if (key == GLFW_KEY_R && action == GLFW_PRESS && walkingPerimeter) walkingPerimeter->Toggle();
+    if (key == GLFW_KEY_F6 && action == GLFW_PRESS) replayVisitor = true;
     if (key == GLFW_KEY_F2 && action == GLFW_PRESS)
     {
         useIglesiaV2 = !useIglesiaV2;

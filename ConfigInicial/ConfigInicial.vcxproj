@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -12,13 +12,36 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Camera.h" />
+    <ClInclude Include="MixquicUnified.h"></ClInclude>
+    <ClInclude Include="MixquicUnifiedData.h"></ClInclude>
     <ClInclude Include="Shader.h" />
+    <ClInclude Include="SkyBox.h" />
+    <ClInclude Include="MixquicPerimeter.h" />
+    <ClInclude Include="VisitanteAnimado.h" />
+    <ClInclude Include="VisitanteDatos.h" />
+    <ClInclude Include="VisitanteKeyframes.h" />
+    <ClInclude Include="VisitanteAcciones.h" />
+    <ClInclude Include="VisitanteAccionesDatos.inl" />
+    <ClInclude Include="MixquicNavegacion.h" />
+    <ClInclude Include="AmbienteMixquic.h" />
+    <ClInclude Include="CantoyaMixquic.h" />
+    <ClInclude Include="MixquicVegetacion.h" />
+    <ClInclude Include="MixquicAlumbrada.h" />
+    <ClInclude Include="MixquicVegetacionDatos.h" />
+    <ClInclude Include="MixquicNavegacionDatos.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Shader\lamp.frag" />
     <None Include="Shader\lamp.vs" />
     <None Include="Shader\lighting.frag" />
+    <None Include="Shader\lighting_alumbrada.frag" />
+    <None Include="Shader\SombraDir.vs" />
+    <None Include="Shader\SombraDir.frag" />
+    <None Include="Shader\HumoCopal.vs" />
+    <None Include="Shader\HumoCopal.frag" />
     <None Include="Shader\lighting.vs" />
+    <None Include="Shader\SkyBox.vs" />
+    <None Include="Shader\SkyBox.frag" />
     <None Include="Shader\modelLoading.frag" />
     <None Include="Shader\modelLoading.vs" />
   </ItemGroup>
