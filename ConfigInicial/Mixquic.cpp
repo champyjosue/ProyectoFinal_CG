@@ -31,6 +31,9 @@
 #include "Camera.h"
 #include "Model.h"
 
+#include "Texture.h"
+
+
 // Function prototypes
 void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mode);
 void MouseCallback(GLFWwindow* window, double xPos, double yPos);
@@ -68,6 +71,8 @@ float movelightPos = 0.0f;
 float rot = 0.0f;
 bool activanim = false;
 bool active = false;
+bool puertasAbiertas = true;
+float anguloPuertas = 75.0f;
 glm::vec3 Light1 = glm::vec3(0.0f);
 
 // ETAPAS 5-6: emisores y trayectorias adaptados a las seis zonas.
@@ -634,6 +639,19 @@ void SceneBudget(const std::vector<Model*>& loaded, const std::vector<Placement>
 
 int main(int argc, char** argv)
 {
+
+    // =========================================================================
+    // ELEMENTOS AGREGADOS: CATRINA, ENTRADA Y BARDAS
+    // =========================================================================
+    const float ESC_CATRINA = 1.0f;
+    glm::vec3 posCatrina(2.8f, 0.0f, 11.5f);
+    float yawCatrina = 180.0f;
+
+    // Entrada monumental y bardas perimetrales (Z = 17.5)
+    glm::vec3 posEntradaPanteon(0.0f, 0.0f, 17.5f);
+    glm::vec3 posPortalBienvenidos(-5.8f, 0.0f, 17.5f);
+
+    // =========================================================================
     bool validate = false;
     bool benchmark = false;
     std::string captureDirectory;
@@ -711,6 +729,7 @@ int main(int argc, char** argv)
     Shader shader("Shader/modelLoading.vs", "Shader/modelLoading.frag");
     Shader lampShader("Shader/lamp.vs", "Shader/lamp.frag");
     Shader lightingShader("Shader/lighting.vs", "Shader/lighting.frag");
+    Shader skyboxshader("Shader/SkyBox.vs", "Shader/SkyBox.frag");
 
     for (GLuint program : {shader.Program, lampShader.Program, lightingShader.Program})
     {
@@ -748,6 +767,21 @@ int main(int argc, char** argv)
     Model luciernaga((char*)"Models/luciernaga.obj");
     Model farol((char*)"Models/farol.obj");
     Model veladora((char*)"Models/veladora.obj");
+
+    // Entrada monumental y muros perimetrales
+    Model arcoEntrada((char*)"Models/entrada_arco_mixquic.obj");
+    Model rejaIzq((char*)"Models/reja_puerta_izq.obj");
+    Model rejaDer((char*)"Models/reja_puerta_der.obj");
+    Model portalBienvenidos((char*)"Models/portal_bienvenidos.obj");
+    Model muroTramo((char*)"Models/muro_panteon_tramo.obj");
+    Model muroPilar((char*)"Models/muro_panteon_pilar.obj");
+
+    // Catrina
+    Model CatCuerpo((char*)"Models/Catrina_Cuerpo.obj");
+    Model CatCabeza((char*)"Models/Catrina_Cabeza.obj");
+    Model CatBrazoDer((char*)"Models/Catrina_BrazoDer.obj");
+    Model CatBrazoIzq((char*)"Models/Catrina_BrazoIzq.obj");
+
     // Exportada desde Blender a Y-arriba, sin cambiar el archivo .blend.
     Model ofrenda(useOfrendaV2 ? "Models/Ofrenda_Mixquic_V2/ofrenda_mixquic_v2.obj" : "Models/ofrenda.obj", true);
 
@@ -1115,6 +1149,75 @@ int main(int argc, char** argv)
     glEnableVertexAttribArray(1);
     glBindVertexArray(0);
 
+    // ==================== INICIA BLOQUE SKYBOX ====================
+    GLfloat skyboxVertices[] = {
+        // Positions
+        -1.0f,  1.0f, -1.0f,
+        -1.0f, -1.0f, -1.0f,
+         1.0f, -1.0f, -1.0f,
+         1.0f, -1.0f, -1.0f,
+         1.0f,  1.0f, -1.0f,
+        -1.0f,  1.0f, -1.0f,
+
+        -1.0f, -1.0f,  1.0f,
+        -1.0f, -1.0f, -1.0f,
+        -1.0f,  1.0f, -1.0f,
+        -1.0f,  1.0f, -1.0f,
+        -1.0f,  1.0f,  1.0f,
+        -1.0f, -1.0f,  1.0f,
+
+         1.0f, -1.0f, -1.0f,
+         1.0f, -1.0f,  1.0f,
+         1.0f,  1.0f,  1.0f,
+         1.0f,  1.0f,  1.0f,
+         1.0f,  1.0f, -1.0f,
+         1.0f, -1.0f, -1.0f,
+
+        -1.0f, -1.0f,  1.0f,
+        -1.0f,  1.0f,  1.0f,
+         1.0f,  1.0f,  1.0f,
+         1.0f,  1.0f,  1.0f,
+         1.0f, -1.0f,  1.0f,
+        -1.0f, -1.0f,  1.0f,
+
+        -1.0f,  1.0f, -1.0f,
+         1.0f,  1.0f, -1.0f,
+         1.0f,  1.0f,  1.0f,
+         1.0f,  1.0f,  1.0f,
+        -1.0f,  1.0f,  1.0f,
+        -1.0f,  1.0f, -1.0f,
+
+        -1.0f, -1.0f, -1.0f,
+        -1.0f, -1.0f,  1.0f,
+         1.0f, -1.0f, -1.0f,
+         1.0f, -1.0f, -1.0f,
+        -1.0f, -1.0f,  1.0f,
+         1.0f, -1.0f,  1.0f
+    };
+
+    // Skybox VAO y VBO
+    GLuint skyboxVBO, skyboxVAO;
+    glGenVertexArrays(1, &skyboxVAO);
+    glGenBuffers(1, &skyboxVBO);
+    glBindVertexArray(skyboxVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, skyboxVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(skyboxVertices), &skyboxVertices, GL_STATIC_DRAW);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (GLvoid*)0);
+    glBindVertexArray(0);
+
+    // Carga de texturas del cubemap
+    std::vector<const GLchar*> faces;
+    faces.push_back("SkyBox/right.jpg");
+    faces.push_back("SkyBox/left.jpg");
+    faces.push_back("SkyBox/top.jpg");
+    faces.push_back("SkyBox/bottom.jpg");
+    faces.push_back("SkyBox/back.jpg");
+    faces.push_back("SkyBox/front.jpg");
+
+    GLuint cubemapTexture = TextureLoading::LoadCubemap(faces);
+    // ==============================================================
+
     glm::mat4 projection = glm::perspective(glm::radians(camera.GetZoom()), (GLfloat)SCREEN_WIDTH / (GLfloat)SCREEN_HEIGHT, 0.1f, 120.0f);
 
     struct Viewpoint { const char* name; glm::vec3 eye, target; float time; };
@@ -1218,6 +1321,13 @@ int main(int argc, char** argv)
             t = shot.time;
         }
         else DoMovement();
+
+        // Animacion suave de apertura y cierre de las rejas de la entrada
+        float metaPuerta = puertasAbiertas ? 75.0f : 0.0f;
+        if (fabs(metaPuerta - anguloPuertas) > 0.5f)
+        {
+            anguloPuertas += (metaPuerta > anguloPuertas ? 60.0f : -60.0f) * deltaTime;
+        }
 
         // Limpiar buffers
         glClearColor(0.018f, 0.023f, 0.042f, 1.0f);
@@ -1393,6 +1503,112 @@ int main(int argc, char** argv)
         glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(modelAlaI));
         cuervoAlaIzq.Draw(lightingShader);
 
+        // =========================================================================
+        // ENTRADA MONUMENTAL MIXQUIC, PUERTAS CON BISAGRA Y BARDA PERIMETRAL
+        // =========================================================================
+        // 1. Arco Floral Monumental de Mixquic (en Z = 17.5)
+        glm::mat4 modelArco = glm::translate(glm::mat4(1.0f), posEntradaPanteon);
+        glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(modelArco));
+        arcoEntrada.Draw(lightingShader);
+
+        // 2. Hoja Izquierda de la Reja
+        glm::mat4 modelRejaI = glm::translate(modelArco, glm::vec3(-1.07f, 0.0f, 0.0f));
+        modelRejaI = glm::rotate(modelRejaI, glm::radians(-anguloPuertas), glm::vec3(0.0f, 1.0f, 0.0f));
+        glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(modelRejaI));
+        rejaIzq.Draw(lightingShader);
+
+        // 3. Hoja Derecha de la Reja
+        glm::mat4 modelRejaD = glm::translate(modelArco, glm::vec3(1.07f, 0.0f, 0.0f));
+        modelRejaD = glm::rotate(modelRejaD, glm::radians(anguloPuertas), glm::vec3(0.0f, 1.0f, 0.0f));
+        glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(modelRejaD));
+        rejaDer.Draw(lightingShader);
+
+        // 4. Portal "BIENVENIDOS"
+        glm::mat4 modelPortalB = glm::translate(glm::mat4(1.0f), posPortalBienvenidos);
+        modelPortalB = glm::scale(modelPortalB, glm::vec3(1.1f));
+        glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(modelPortalB));
+        portalBienvenidos.Draw(lightingShader);
+
+        // 5. Barda Frontal (Z = 17.5)
+        float xFrontalIzq[] = { -3.2f, -6.2f, -9.2f, -12.2f, -15.0f };
+        for (float x : xFrontalIzq)
+        {
+            glm::mat4 mMuro = glm::translate(glm::mat4(1.0f), glm::vec3(x, 0.0f, 17.5f));
+            glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(mMuro));
+            muroTramo.Draw(lightingShader);
+        }
+        float xFrontalDer[] = { 3.2f, 6.2f, 9.2f, 12.2f, 15.0f };
+        for (float x : xFrontalDer)
+        {
+            glm::mat4 mMuro = glm::translate(glm::mat4(1.0f), glm::vec3(x, 0.0f, 17.5f));
+            glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(mMuro));
+            muroTramo.Draw(lightingShader);
+        }
+
+        // 6. Bardas Laterales (X = -16.5 y X = +16.5)
+        for (float z = 16.0f; z >= -20.0f; z -= 3.0f)
+        {
+            glm::mat4 mMuroI = glm::translate(glm::mat4(1.0f), glm::vec3(-16.5f, 0.0f, z));
+            mMuroI = glm::rotate(mMuroI, glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+            glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(mMuroI));
+            muroTramo.Draw(lightingShader);
+
+            glm::mat4 mMuroD = glm::translate(glm::mat4(1.0f), glm::vec3(16.5f, 0.0f, z));
+            mMuroD = glm::rotate(mMuroD, glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+            glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(mMuroD));
+            muroTramo.Draw(lightingShader);
+        }
+
+        // 7. Barda Trasera (Z = -21.0)
+        for (float x = -15.0f; x <= 15.0f; x += 3.0f)
+        {
+            glm::mat4 mMuroT = glm::translate(glm::mat4(1.0f), glm::vec3(x, 0.0f, -21.0f));
+            glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(mMuroT));
+            muroTramo.Draw(lightingShader);
+        }
+
+        // 8. Pilares en esquinas y accesos
+        glm::vec3 pilaresPos[] = {
+            glm::vec3(-1.75f, 0.0f,  17.5f),
+            glm::vec3(1.75f, 0.0f,  17.5f),
+            glm::vec3(-16.5f, 0.0f,  17.5f),
+            glm::vec3(16.5f, 0.0f,  17.5f),
+            glm::vec3(-16.5f, 0.0f, -21.0f),
+            glm::vec3(16.5f, 0.0f, -21.0f)
+        };
+        for (const glm::vec3& posP : pilaresPos)
+        {
+            glm::mat4 mPilar = glm::translate(glm::mat4(1.0f), posP);
+            glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(mPilar));
+            muroPilar.Draw(lightingShader);
+        }
+
+        // ---------- CATRINA ----------
+        glm::mat4 catBase(1.0f);
+        catBase = glm::translate(catBase, posCatrina);
+        catBase = glm::rotate(catBase, glm::radians(yawCatrina), glm::vec3(0.0f, 1.0f, 0.0f));
+        catBase = glm::scale(catBase, glm::vec3(ESC_CATRINA));
+        catBase = glm::rotate(catBase, glm::radians(4.0f * sin(t * 1.3f)), glm::vec3(0.0f, 0.0f, 1.0f));
+        glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(catBase));
+        CatCuerpo.Draw(lightingShader);
+
+        glm::mat4 catCab = glm::translate(catBase, glm::vec3(0.0f, 0.82f, 0.0f));
+        catCab = glm::rotate(catCab, glm::radians(18.0f * sin(t * 0.7f)), glm::vec3(0.0f, 1.0f, 0.0f));
+        catCab = glm::rotate(catCab, glm::radians(6.0f * sin(t * 1.3f + 0.8f)), glm::vec3(0.0f, 0.0f, 1.0f));
+        glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(catCab));
+        CatCabeza.Draw(lightingShader);
+
+        glm::mat4 catBD = glm::translate(catBase, glm::vec3(-0.12f, 0.78f, 0.0f));
+        catBD = glm::rotate(catBD, glm::radians(-(115.0f + 14.0f * sin(t * 5.0f))), glm::vec3(0.0f, 0.0f, 1.0f));
+        glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(catBD));
+        CatBrazoDer.Draw(lightingShader);
+
+        glm::mat4 catBI = glm::translate(catBase, glm::vec3(0.12f, 0.78f, 0.0f));
+        catBI = glm::rotate(catBI, glm::radians(14.0f + 4.0f * sin(t * 1.3f)), glm::vec3(0.0f, 0.0f, 1.0f));
+        catBI = glm::rotate(catBI, glm::radians(6.0f * sin(t * 0.9f)), glm::vec3(1.0f, 0.0f, 0.0f));
+        glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(catBI));
+        CatBrazoIzq.Draw(lightingShader);
+
         // TODO: Reactivar junto con la carga de Models/Blue+Mushroom.obj.
         // glm::mat4 modelHongo = glm::translate(glm::mat4(1.0f), glm::vec3(11,0,8));
         // modelHongo = glm::scale(modelHongo, glm::vec3(0.15f));
@@ -1416,6 +1632,22 @@ int main(int argc, char** argv)
         // Importante: regresamos transparency a 0 para no afectar el siguiente frame
         // glUniform1i(glGetUniformLocation(lightingShader.Program, "transparency"), 0);
         glBindVertexArray(0);
+
+        // ==================== DRAW SKYBOX ====================
+        glDepthFunc(GL_LEQUAL);
+        skyboxshader.Use();
+        view = glm::mat4(glm::mat3(camera.GetViewMatrix()));
+        glUniformMatrix4fv(glGetUniformLocation(skyboxshader.Program, "view"), 1, GL_FALSE, glm::value_ptr(view));
+        glUniformMatrix4fv(glGetUniformLocation(skyboxshader.Program, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
+
+        glBindVertexArray(skyboxVAO);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTexture);
+        glDrawArrays(GL_TRIANGLES, 0, 36);
+        glBindVertexArray(0);
+        glDepthFunc(GL_LESS);
+        glActiveTexture(GL_TEXTURE0);
+        // =====================================================
 
         if (validate)
         {
@@ -1460,6 +1692,8 @@ int main(int argc, char** argv)
     glDeleteTextures(1, &concreteTexture);
     glDeleteVertexArrays(1, &VAO);
     glDeleteBuffers(1, &VBO);
+    glDeleteVertexArrays(1, &skyboxVAO);
+    glDeleteBuffers(1, &skyboxVBO);
     glfwTerminate();
     return resultCode;
 }
@@ -1519,6 +1753,11 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mode
 
     if (keys[GLFW_KEY_O]) movelightPos += 0.1f;
     if (keys[GLFW_KEY_L]) movelightPos -= 0.1f;
+
+    if (key == GLFW_KEY_R && action == GLFW_PRESS)
+    {
+        puertasAbiertas = !puertasAbiertas;
+    }
 }
 
 void MouseCallback(GLFWwindow* window, double xPos, double yPos)

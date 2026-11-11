@@ -1,0 +1,9 @@
+# Materiales para Personajes Animados del Panteon
+newmtl mat_personajes
+Ka 0.35 0.35 0.35
+Kd 1.00 1.00 1.00
+Ks 0.15 0.15 0.15
+Ns 16.0
+d 1.0
+illum 2
+map_Kd panteon_personajes.png
