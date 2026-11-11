@@ -11,6 +11,20 @@
 class Shader
 {
 public:
+    struct DrawUniforms
+    {
+        GLint model=-1;
+        GLint color=-1;
+        GLint emission=-1;
+        GLint hasTexture=-1;
+        GLint hasSpecular=-1;
+        GLint shininess=-1;
+        GLint diffuseSampler=-1;
+        GLint specularSampler=-1;
+    };
+
+    const DrawUniforms& DrawLocations() const { return drawUniforms; }
+
 	GLuint Program;
 	GLuint uniformColor;
 	// Constructor generates the shader on the fly
@@ -86,6 +100,17 @@ public:
 		}
 		//le damos la localidad de color
 		uniformColor = glGetUniformLocation(this->Program, "color");
+        if (success)
+        {
+            drawUniforms.model = glGetUniformLocation(Program, "model");
+            drawUniforms.color = glGetUniformLocation(Program, "materialColor");
+            drawUniforms.emission = glGetUniformLocation(Program, "emissionColor");
+            drawUniforms.hasTexture = glGetUniformLocation(Program, "hasTexture");
+            drawUniforms.hasSpecular = glGetUniformLocation(Program, "hasSpecularTexture");
+            drawUniforms.shininess = glGetUniformLocation(Program, "material.shininess");
+            drawUniforms.diffuseSampler = glGetUniformLocation(Program, "texture_diffuse1");
+            drawUniforms.specularSampler = glGetUniformLocation(Program, "texture_specular1");
+        }
 		// Delete the shaders as they're linked into our program now and no longer necessery
 		glDeleteShader(vertex);
 		glDeleteShader(fragment);
@@ -101,6 +126,8 @@ public:
 	{
 		return uniformColor;
 	}
+private:
+    DrawUniforms drawUniforms;
 };
 
 #endif

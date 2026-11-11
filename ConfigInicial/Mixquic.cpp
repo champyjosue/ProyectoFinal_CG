@@ -74,7 +74,7 @@ GLfloat lastX = WIDTH / 2.0f;
 GLfloat lastY = HEIGHT / 2.0f;
 bool keys[1024];
 bool firstMouse = true;
-// Fase 2B: V2 experimental por defecto; F2 o --iglesia=v1 permiten volver a V1.
+// Iglesia V2 por defecto. La compatibilidad V1 se selecciona solo al iniciar.
 bool useIglesiaV2 = true;
 // Fase 3A: la ofrenda anterior permanece disponible con --ofrenda=v1.
 bool useOfrendaV2 = true;
@@ -83,11 +83,7 @@ bool useOfrendaHibrida = true;
 bool useExpandedTerrain = true;
 // Fase 3C: comparacion reversible al iniciar.
 bool useNewLayout = true;
-const char* ChurchWindowTitle()
-{
-    return useIglesiaV2 ? "Panteon de Mixquic - Iglesia V2 experimental [F2: V1]"
-        : "Panteon de Mixquic - Iglesia V1 [F2: V2]";
-}
+constexpr const char* tituloVentana = u8"Pante\u00f3n de Mixquic \u2014 La Alumbrada";
 
 // Deltatime
 GLfloat deltaTime = 0.0f;
@@ -257,17 +253,17 @@ void AddPlacement(std::vector<Placement>& items, Model& model, const glm::vec3& 
 
 void DrawPlacement(const Placement& item, Shader& shader, GLuint diffuseOverride = 0)
 {
-    glUniformMatrix4fv(glGetUniformLocation(shader.Program, "model"), 1, GL_FALSE, glm::value_ptr(item.matrix));
+    glUniformMatrix4fv(shader.DrawLocations().model, 1, GL_FALSE, glm::value_ptr(item.matrix));
     item.model->Draw(shader, diffuseOverride);
 }
 
 void DrawSurface(const Surface& surface, GLuint vao, Shader& shader)
 {
     glm::mat4 matrix = glm::scale(glm::translate(glm::mat4(1.0f), surface.center), surface.size);
-    glUniformMatrix4fv(glGetUniformLocation(shader.Program, "model"), 1, GL_FALSE, glm::value_ptr(matrix));
-    glUniform3fv(glGetUniformLocation(shader.Program, "materialColor"), 1, glm::value_ptr(surface.color));
-    glUniform3f(glGetUniformLocation(shader.Program, "emissionColor"), 0.0f, 0.0f, 0.0f);
-    glUniform1i(glGetUniformLocation(shader.Program, "hasTexture"), 0);
+    glUniformMatrix4fv(shader.DrawLocations().model, 1, GL_FALSE, glm::value_ptr(matrix));
+    glUniform3fv(shader.DrawLocations().color, 1, glm::value_ptr(surface.color));
+    glUniform3f(shader.DrawLocations().emission, 0.0f, 0.0f, 0.0f);
+    glUniform1i(shader.DrawLocations().hasTexture, 0);
     glBindVertexArray(vao);
     glDrawArrays(GL_TRIANGLES, 0, 36);
     glBindVertexArray(0);
@@ -668,6 +664,7 @@ void SceneBudget(const std::vector<Model*>& loaded, const std::vector<Placement>
 #include "CantoyaMixquic.h"
 #include "MixquicVegetacion.h"
 #include "MixquicAlumbrada.h"
+#include "MixquicSuelo6C.h"
 
 static MixquicPerimeter* walkingPerimeter = nullptr;
 static bool replayVisitor = false;
@@ -832,6 +829,8 @@ int main(int argc, char** argv)
     bool visitorDemoCamera = false;
     int visitorPose = 0;
     const visitanteAcciones::Pista* demoAction = nullptr;
+    bool alumbradaAnterior = false, tierraNatural = true;
+    bool revision6c1 = true, tierraLigera6c1 = false;
     std::string captureDirectory;
     for (int i = 1; i < argc; ++i)
     {
@@ -851,8 +850,13 @@ int main(int argc, char** argv)
         else if (argument == "--globos=off") useLanterns = false;
         else if (argument == "--vegetacion=on") useVegetation = true;
         else if (argument == "--vegetacion=off") useVegetation = false;
-        else if (argument == "--iluminacion=original") cinematica = false;
-        else if (argument == "--iluminacion=alumbrada") cinematica = true;
+        else if (argument == "--iluminacion=original") { cinematica = false; alumbradaAnterior = false; }
+        else if (argument == "--iluminacion=alumbrada") { cinematica = true; alumbradaAnterior = false; }
+        else if (argument == "--iluminacion=alumbrada-6b") { cinematica = true; alumbradaAnterior = true; }
+        else if (argument == "--senderos=original") tierraNatural = false;
+        else if (argument == "--senderos=tierra") tierraNatural = true;
+        else if (argument == "--revision-6c1=off") revision6c1 = false;
+        else if (argument == "--tierra-6c1=ligera") tierraLigera6c1 = true;
         else if (argument == "--sombras=off") usarSombras = false;
         else if (argument == "--sombras=on") usarSombras = true;
         else if (argument == "--humo=off") usarHumo = false;
@@ -893,7 +897,7 @@ int main(int argc, char** argv)
         }
         else
         {
-            std::cerr << "Uso: ConfigInicial.exe [--iglesia=v1|--iglesia=v2] [--ofrenda=v1|--ofrenda=v2|--ofrenda=v2-hibrida] [--skybox=on|off] [--muro=on|off] [--terreno=base|ampliado] [--distribucion=62|77|anterior|nueva] [--acceso=anterior|ajustado] [--validar-navegacion] [--ambiente=original|animado] [--demo-ambiente=campana|insecto|globos] [--globos=on|off] [--vegetacion=on|off] [--iluminacion=original|alumbrada] [--sombras=on|off] [--humo=on|off] [--cantoya-modelo=v1|v2] [--personajes=on|off] [--demo-personaje=flor|veladora|oracion|caminar|rodillas] [--pose-personaje=neutral|inclinada|brazo|rodillas] [--validar-personaje=poses|flor] [--validar-escena carpeta_existente | --medir-fps carpeta_existente]" << std::endl;
+            std::cerr << "Uso: ConfigInicial.exe [--iglesia=v1|--iglesia=v2] [--ofrenda=v1|--ofrenda=v2|--ofrenda=v2-hibrida] [--skybox=on|off] [--muro=on|off] [--terreno=base|ampliado] [--distribucion=62|77|anterior|nueva] [--acceso=anterior|ajustado] [--validar-navegacion] [--ambiente=original|animado] [--demo-ambiente=campana|insecto|globos] [--globos=on|off] [--vegetacion=on|off] [--iluminacion=original|alumbrada|alumbrada-6b] [--senderos=original|tierra] [--revision-6c1=off] [--tierra-6c1=ligera] [--sombras=on|off] [--humo=on|off] [--cantoya-modelo=v1|v2] [--personajes=on|off] [--demo-personaje=flor|veladora|oracion|caminar|rodillas] [--pose-personaje=neutral|inclinada|brazo|rodillas] [--validar-personaje=poses|flor] [--validar-escena carpeta_existente | --medir-fps carpeta_existente]" << std::endl;
             return EXIT_FAILURE;
         }
     }
@@ -943,7 +947,7 @@ int main(int argc, char** argv)
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
     glfwWindowHint(GLFW_RESIZABLE, GL_FALSE);
 
-    GLFWwindow* window = glfwCreateWindow(WIDTH, HEIGHT, ChurchWindowTitle(), nullptr, nullptr);
+    GLFWwindow* window = glfwCreateWindow(WIDTH, HEIGHT, tituloVentana, nullptr, nullptr);
 
     if (nullptr == window)
     {
@@ -988,6 +992,8 @@ int main(int argc, char** argv)
         if (!linked) { glfwTerminate(); return EXIT_FAILURE; }
     }
 
+    const bool alumbradaNueva = cinematica && !alumbradaAnterior;
+
     // CARGA DE MODELOS
     Model Piso((char*)"Models/piso.obj");
     // TODO: Reactivar la carga y el dibujo cuando se agregue Models/TumbaTransparente.obj.
@@ -1013,10 +1019,10 @@ int main(int argc, char** argv)
 
     // Modelos luminosos
     Model fogata((char*)"Models/fogata.obj");
-    Model vela((char*)"Models/vela.obj");
+    Model vela("Models/vela.obj",alumbradaNueva);
     Model luciernaga((char*)"Models/luciernaga.obj");
-    Model farol((char*)"Models/farol.obj");
-    Model veladora((char*)"Models/veladora.obj");
+    Model farol("Models/farol.obj",alumbradaNueva);
+    Model veladora("Models/veladora.obj",alumbradaNueva);
     // Exportada desde Blender a Y-arriba, sin cambiar el archivo .blend.
     const char* ofrendaPath=useOfrendaHibrida ? "Models/Ofrenda_Mixquic_V2_Hibrida/ofrenda_v2_hibrida_prueba.obj" : (useOfrendaV2 ? "Models/Ofrenda_Mixquic_V2/ofrenda_mixquic_v2.obj" : "Models/ofrenda.obj");
     Model ofrenda(ofrendaPath,true);
@@ -1054,7 +1060,7 @@ int main(int argc, char** argv)
         std::cerr << "ERROR: recursos o transformacion de Iglesia V2." << std::endl; glfwTerminate(); return EXIT_FAILURE;
     }
     std::cout << "IGLESIA_ACTIVA: " << (useIglesiaV2 ? "V2 escala=1" : "V1 escala=0.7")
-        << "; posicion=(0,0,-8.5); fachada=+Z; F2 alterna sin superponer." << std::endl;
+        << "; posicion=(0,0,-8.5); fachada=+Z; seleccion fija durante la sesion." << std::endl;
     Placement ground = Grounded(Piso, glm::vec3(0, GROUND_Y, 0), glm::vec3(6.8f, 1.0f, 8.4f));
     Placement altar = Grounded(ofrenda, glm::vec3(-0.8f, 0.1f, -19.25f), glm::vec3(0.5f));
     std::vector<Surface> surfaces;
@@ -1715,12 +1721,14 @@ int main(int argc, char** argv)
         }
         const bool initialChurch = useIglesiaV2;
         KeyCallback(window, GLFW_KEY_F2, 0, GLFW_PRESS, 0);
+        KeyCallback(window, GLFW_KEY_F2, 0, GLFW_REPEAT, 0);
         KeyCallback(window, GLFW_KEY_F2, 0, GLFW_RELEASE, 0);
-        if (useIglesiaV2 == initialChurch) return EXIT_FAILURE;
-        KeyCallback(window, GLFW_KEY_F2, 0, GLFW_PRESS, 0);
-        KeyCallback(window, GLFW_KEY_F2, 0, GLFW_RELEASE, 0);
-        if (useIglesiaV2 != initialChurch) return EXIT_FAILURE;
-        std::cout << "VALIDACION: selector F2 cambia V1/V2 y restaura la seleccion inicial; un solo templo por cuadro." << std::endl;
+        if (useIglesiaV2 != initialChurch)
+        {
+            std::cerr << "ERROR: F2 altero la iglesia de la sesion." << std::endl;
+            return EXIT_FAILURE;
+        }
+        std::cout << "VALIDACION: F2 desactivada; iglesia V" << (initialChurch ? 2 : 1) << " conservada." << std::endl;
         std::cout << "VALIDACION: WASD, flechas y mouse; altura peatonal constante." << std::endl;
         walkingNavigation = savedNavigation;
     }
@@ -1804,15 +1812,42 @@ int main(int argc, char** argv)
     glUniform1f(glGetUniformLocation(lightingShader.Program,"alumbradaExposure"),alumbrada4g::exposicion);
     glUniform1f(glGetUniformLocation(lightingShader.Program,"alumbradaEmission"),alumbrada4g::emision);
     const glm::vec3 copal=glm::vec3(altar.matrix*glm::vec4(-.43f,.38f,.93f,1));
+    alumbrada6c::Ambiente luzLocal;
+    if(alumbradaNueva)
+    {
+        const std::vector<Placement> luminariasFijas={
+            Grounded(farol,posFarol,glm::vec3(ESC_FAROL)),
+            Grounded(vela,posVela,glm::vec3(ESC_VELA)),
+            Grounded(veladora,posVeladora,glm::vec3(ESC_VELADORA))};
+        if(!luzLocal.Crear(lightingShader.Program,unifiedPaving ? &paving : nullptr,
+                          altar,allDecorations,luminariasFijas,farol,vela,veladora,useExpandedTerrain,revision6c1,tierraLigera6c1))
+        {
+            std::cerr<<"ERROR ALUMBRADA 6C: recursos de terreno o resplandor."<<std::endl;
+            luzLocal.Liberar();
+            glfwTerminate();
+            return EXIT_FAILURE;
+        }
+    }
     std::cout<<"ALUMBRADA PERFIL: modo="<<(cinematica?"alumbrada":"original")<<" sombras="<<mostrarSombras
         <<" humo="<<mostrarHumo<<" copal="<<copal.x<<","<<copal.y<<","<<copal.z<<std::endl;
+
+    const bool repetirVisitas=playFlower && !visitorDemoCamera && !captureVisitor;
+    if (repetirVisitas && visitor)
+    {
+        visitor->ElegirAtuendo(0);
+        for(const auto& actor:actions) actor->ElegirAtuendo();
+        std::cout<<"VISITANTE ATUENDOS: "<<actions.size()+1<<" variantes, 1 juego de mallas corporales"<<std::endl;
+    }
+    const double inicioVisitas=glfwGetTime();
+    std::vector<visitanteAcciones::Reproduccion> reproducciones(actions.size());
 
     // Game loop
     while (resultCode == EXIT_SUCCESS && !glfwWindowShouldClose(window))
     {
         const auto frameStart = std::chrono::steady_clock::now();
         // Calcular deltaTime
-        GLfloat currentFrame = static_cast<GLfloat>(glfwGetTime() - animationStart);
+        const double tiempoGlobal=glfwGetTime();
+        GLfloat currentFrame = static_cast<GLfloat>(tiempoGlobal - animationStart);
         const float movementTime = glm::clamp(currentFrame - lastFrame,0.f,.25f);
         deltaTime = (std::min)(movementTime, 0.05f);
         lastFrame = currentFrame;
@@ -1832,30 +1867,32 @@ int main(int argc, char** argv)
             t = captureVisitor ? 0 : shot.time;
             visitorTime = captureVisitor ? shot.time : t;
         }
-        else
+        const double tiempoVisitas=validate ? static_cast<double>(t) : tiempoGlobal-inicioVisitas;
+        if (replayVisitor)
+        {
+            visitorStart=currentFrame;
+            visitorTime=0;
+            if (visitor) visitor->ReiniciarCiclo(tiempoVisitas);
+            for (const auto& actor:actions) actor->ReiniciarCiclo(tiempoVisitas);
+            replayVisitor=false;
+        }
+        const float tiempoFlor=repetirVisitas && visitor ? visitor->TiempoCiclo(tiempoVisitas) : visitorTime;
+        for(size_t i=0;i<actions.size();++i)
+            reproducciones[i]=repetirVisitas ? actions[i]->TiempoCiclo(tiempoVisitas)
+                                            : visitanteAcciones::Reproduccion{visitorTime,-1,false};
+
+        if (!validate)
         {
             if (walkingNavigation)
             {
                 navigation.iglesia = useIglesiaV2 ? churchV2.bounds : churchV1.bounds;
                 navigation.visitantes.clear();
                 if (visitor && showFlower) navigation.visitantes.push_back({10.20f,6.10f});
-                for (const auto& actor : actions)
-                {
-                    glm::vec2 center(actor->pista.raiz.x,actor->pista.raiz.z);
-                    if (actor->pista.gesto == visitanteAcciones::Gesto::Caminar)
-                        center.x += visitanteAcciones::Interpolar(actor->pista.claves,visitorTime).avance;
-                    navigation.visitantes.push_back(center);
-                }
+                for(size_t i=0;i<actions.size();++i)
+                    navigation.visitantes.push_back(actions[i]->Centro(reproducciones[i]));
             }
             DoMovement(movementTime);
             if (perimeter) perimeter->Advance(deltaTime, {camera.GetPosition().x, camera.GetPosition().z});
-        }
-
-        if (replayVisitor)
-        {
-            visitorStart = currentFrame;
-            visitorTime = 0;
-            replayVisitor = false;
         }
 
         alumbradaMedicion::activo=false;
@@ -1873,6 +1910,7 @@ int main(int argc, char** argv)
 
         lightingShader.Use();
         if (mostrarSombras) sombras.Enlazar(lightingShader);
+        if(alumbradaNueva) luzLocal.Enlazar();
         glUniform3f(glGetUniformLocation(lightingShader.Program, "objectGlow"), 0, 0, 0);
         const GLint pulsoLoc=glGetUniformLocation(lightingShader.Program,"emissionPulse");
         const float pulso=0.94f+0.06f*sin(t*8.0f);
@@ -1922,7 +1960,7 @@ int main(int argc, char** argv)
         if (cinematica)
         {
             const float pulsos[]={parpadeoFogata,parpadeoVela,destelloLuc,titileoFarol,parpadeoVeladora};
-            perfil.Aplicar(moonPos,pointLightPositions,pulsos,camera.GetPosition(),camera.GetFront());
+            perfil.Aplicar(moonPos,pointLightPositions,pulsos,camera.GetPosition(),camera.GetFront(),alumbradaNueva);
         }
         else
         {
@@ -1998,25 +2036,36 @@ int main(int argc, char** argv)
         }
 
         glm::mat4 view = camera.GetViewMatrix();
-        GLint modelLoc = glGetUniformLocation(lightingShader.Program, "model");
+        const GLint modelLoc = lightingShader.DrawLocations().model;
         GLint viewLoc = glGetUniformLocation(lightingShader.Program, "view");
         GLint projLoc = glGetUniformLocation(lightingShader.Program, "projection");
 
         glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
         glUniformMatrix4fv(projLoc, 1, GL_FALSE, glm::value_ptr(projection));
 
-        // ZONAS 1-4: el OBJ piso conserva su geometria, con concreto existente en vez de pasto.
+        // La máscara visual del terreno usa la huella de los senderos que valida navegación.
+        const bool sueloNuevo=alumbradaNueva && tierraNatural;
+        luzLocal.Tierra(sueloNuevo);
         glUniform2f(glGetUniformLocation(lightingShader.Program, "textureTiling"), useExpandedTerrain?25.0f:17.0f, useExpandedTerrain?32.0f:21.0f);
         DrawPlacement(ground, lightingShader, concreteTexture);
         glUniform2f(glGetUniformLocation(lightingShader.Program, "textureTiling"), 1.0f, 1.0f);
+        luzLocal.Tierra(false);
         for (const Surface& surface : surfaces) DrawSurface(surface, VAO, lightingShader);
+        luzLocal.Tierra(sueloNuevo);
         if(unifiedPaving)DrawPlacement(paving,lightingShader);
+        luzLocal.Tierra(false);
         if (articulatedAmbient && useIglesiaV2) ambiental.DibujarTemplo(iglesiaV2,churchV2.matrix,lightingShader,t);
         else DrawPlacement(useIglesiaV2 ? churchV2 : churchV1, lightingShader);
         // ZONA 5 y tumba principal de ZONA 6: tres instancias base reutilizadas.
         for (const Placement& grave : visibleGraves) DrawPlacement(grave, lightingShader);
-        for (const Placement& decoration : decorations) DrawPlacement(decoration, lightingShader);
-        for (const auto& prop : attached) DrawPlacement(prop.item, lightingShader);
+        const auto dibujarLuminaria=[&](const Placement& item)
+        {
+            luzLocal.Fuente(item.model,farol,vela,veladora);
+            DrawPlacement(item,lightingShader);
+        };
+        for (const Placement& decoration : decorations) dibujarLuminaria(decoration);
+        for (const auto& prop : attached) dibujarLuminaria(prop.item);
+        luzLocal.Fuente(nullptr,farol,vela,veladora);
         DrawPlacement(perchedCrow, lightingShader);
         DrawPlacement(altar, lightingShader);
         if (visitor && showFlower)
@@ -2027,7 +2076,7 @@ int main(int argc, char** argv)
                 glGenQueries(1, &primitiveQuery);
                 glBeginQuery(GL_PRIMITIVES_GENERATED, primitiveQuery);
             }
-            if (playFlower && !captureVisitorPoses) visitor->DrawAnimation(lightingShader, visitorTime);
+            if (playFlower && !captureVisitorPoses) visitor->DrawAnimation(lightingShader, tiempoFlor);
             else visitor->Draw(lightingShader, captureVisitorPoses ? captureIndex : visitorPose);
             if (verifyVisitorDraw)
             {
@@ -2052,9 +2101,9 @@ int main(int argc, char** argv)
                 glBeginQuery(GL_PRIMITIVES_GENERATED, actionQuery);
             }
             visitanteAcciones::Cuenta total;
-            for (const auto& actor : actions)
+            for(size_t i=0;i<actions.size();++i)
             {
-                const auto count = actor->Dibujar(lightingShader, visitorTime);
+                const auto count=actions[i]->Dibujar(lightingShader,reproducciones[i]);
                 total.llamadas += count.llamadas;
                 total.triangulos += count.triangulos;
             }
@@ -2085,9 +2134,10 @@ int main(int argc, char** argv)
 
         // Los cinco emisores conservan sus modelos y sus efectos de parpadeo.
         DrawPlacement(Grounded(fogata, posFogata, glm::vec3(ESC_FOGATA)), lightingShader);
-        DrawPlacement(Grounded(vela, posVela, glm::vec3(ESC_VELA)), lightingShader);
-        DrawPlacement(Grounded(farol, posFarol, glm::vec3(ESC_FAROL)), lightingShader);
-        DrawPlacement(Grounded(veladora, posVeladora, glm::vec3(ESC_VELADORA)), lightingShader);
+        dibujarLuminaria(Grounded(vela,posVela,glm::vec3(ESC_VELA)));
+        dibujarLuminaria(Grounded(farol,posFarol,glm::vec3(ESC_FAROL)));
+        dibujarLuminaria(Grounded(veladora,posVeladora,glm::vec3(ESC_VELADORA)));
+        luzLocal.Fuente(nullptr,farol,vela,veladora);
         glm::mat4 modelLuciernaga = FireflyMatrix(t);
         glUniform3f(glGetUniformLocation(lightingShader.Program, "objectGlow"), 0.08f, 0.2f, 0.02f);
         glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(modelLuciernaga));
@@ -2196,6 +2246,7 @@ int main(int argc, char** argv)
         // Importante: regresamos transparency a 0 para no afectar el siguiente frame
         // glUniform1i(glGetUniformLocation(lightingShader.Program, "transparency"), 0);
         if (mostrarHumo) humo.Dibujar(copal,t,view,projection);
+        luzLocal.DibujarHalos(view,projection,t);
         glBindVertexArray(0);
 
         if (validate)
@@ -2265,6 +2316,7 @@ int main(int argc, char** argv)
     if (vegetacionTiempo) glDeleteQueries(1,&vegetacionTiempo);
     if (cantoyaTimer) glDeleteQueries(1,&cantoyaTimer);
     if (cantoyaQuery) glDeleteQueries(1,&cantoyaQuery);
+    luzLocal.Liberar();
     cantoya.Liberar();
     ambiental.Liberar();
     humo.Liberar();
@@ -2319,13 +2371,6 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mode
     if (GLFW_KEY_ESCAPE == key && GLFW_PRESS == action)glfwSetWindowShouldClose(window, GL_TRUE);
     if (key == GLFW_KEY_R && action == GLFW_PRESS && walkingPerimeter) walkingPerimeter->Toggle();
     if (key == GLFW_KEY_F6 && action == GLFW_PRESS) replayVisitor = true;
-    if (key == GLFW_KEY_F2 && action == GLFW_PRESS)
-    {
-        useIglesiaV2 = !useIglesiaV2;
-        glfwSetWindowTitle(window, ChurchWindowTitle());
-        std::cout << "IGLESIA_ACTIVA: " << (useIglesiaV2 ? "V2" : "V1") << std::endl;
-    }
-
     if (key >= 0 && key < 1024) {
         if (action == GLFW_PRESS)
             keys[key] = true;

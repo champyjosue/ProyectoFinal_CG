@@ -117,13 +117,19 @@ inline std::unique_ptr<Mesh> CrearLlama()
 }
 
 struct Cuenta { size_t llamadas = 0, triangulos = 0; };
+struct Reproduccion
+{
+    float tiempo=0, regresoCaminata=-1;
+    bool regresoGesto=false;
+};
 
 class Accion
 {
 public:
     Accion(const Pista& definition, const VisitanteAnimado& loaded,
         const std::vector<Surface>& sceneSurfaces)
-        : pista(definition), rig(loaded.CompartirPiezas()), surfaces(sceneSurfaces)
+        : pista(definition), rig(loaded.CompartirPiezas()), surfaces(sceneSurfaces),
+          reloj(EsperaInicial(definition.gesto))
     {
         rig.Place(pista.raiz, pista.giro, surfaces);
         if (pista.gesto == Gesto::Veladora)
@@ -138,6 +144,37 @@ public:
         const Clave clave = Interpolar(pista.claves, t);
         if (pista.gesto == Gesto::Caminar) return EvaluarCaminata(clave);
         return rig.Articular(clave.pose, clave.avance);
+    }
+
+    Reproduccion TiempoCiclo(double ahora) const
+    {
+        const float fin=pista.claves.back().tiempo;
+        if (pista.gesto==Gesto::Veladora)
+        {
+            constexpr float pausaEncendida=1.8f, pausaInicial=1.4f;
+            const auto toma=visitanteCiclo::IdaYVuelta(reloj.Fase(ahora,2.f*fin+pausaEncendida+pausaInicial),
+                                                       fin,pausaEncendida);
+            return {toma.tiempo,-1,toma.regreso};
+        }
+        if (pista.gesto==Gesto::Caminar)
+        {
+            const float fase=reloj.Fase(ahora,fin+pausaTumba+duracionRegreso+.8f);
+            return {(std::min)(fase,fin),fase-fin-pausaTumba,false};
+        }
+        const float pausa=pista.gesto==Gesto::Oracion?1.1f:1.55f;
+        return {(std::min)(reloj.Fase(ahora,fin+pausa),fin),-1,false};
+    }
+
+    void ReiniciarCiclo(double ahora) { reloj.Reiniciar(ahora); }
+    void ElegirAtuendo() { rig.ElegirAtuendo(static_cast<size_t>(pista.gesto)+1); }
+
+    glm::vec2 Centro(const Reproduccion& toma) const
+    {
+        glm::vec2 centro(pista.raiz.x,pista.raiz.z);
+        if(pista.gesto==Gesto::Caminar)
+            centro.x+=toma.regresoCaminata>=0 ? DesplazamientoRegreso(toma.regresoCaminata)
+                                              : Interpolar(pista.claves,toma.tiempo).avance;
+        return centro;
     }
 
     bool Comprobar(const std::vector<Bounds>& obstacles, const Placement& grave,
@@ -157,6 +194,20 @@ public:
                 return false;
             }
         }
+        if (walking)
+        {
+            const int muestras=static_cast<int>(std::ceil(duracionRegreso/.05f));
+            for(int i=0;i<=muestras;++i)
+            {
+                const float t=(std::min)(i*.05f,duracionRegreso);
+                if(!rig.ComprobarArticulacion(EvaluarRegreso(t),obstacles,grave,emptyRoutes))
+                {
+                    std::cerr<<"ERROR ACCION caminar regreso t="<<t<<std::endl;
+                    return false;
+                }
+            }
+            std::cout<<"VISITANTE CAMINATA REGRESO: muestras="<<muestras+1<<" carril=OK"<<std::endl;
+        }
         const auto initial = Evaluar(0);
         Evaluar(pista.claves.back().tiempo);
         const auto restarted = Evaluar(0);
@@ -175,17 +226,16 @@ public:
         return true;
     }
 
-    Cuenta Dibujar(Shader& shader, float time)
+    Cuenta Dibujar(Shader& shader, const Reproduccion& toma)
     {
-        const auto matrices = Evaluar(time);
+        const float time=toma.tiempo;
+        const auto matrices=toma.regresoCaminata>=0 ? EvaluarRegreso(toma.regresoCaminata) : Evaluar(time);
         Cuenta cuenta;
         const GLint uniform = glGetUniformLocation(shader.Program, "model");
         const auto model = [&](int index, const glm::mat4& matrix) {
-            auto& piece = rig.Pieza(index);
-            glUniformMatrix4fv(uniform, 1, GL_FALSE, glm::value_ptr(matrix));
-            piece.Draw(shader);
-            cuenta.llamadas += piece.Meshes().size();
-            cuenta.triangulos += piece.TriangleCount();
+            const auto pieza=rig.DibujarPieza(shader,uniform,index,matrix);
+            cuenta.llamadas+=pieza.llamadas;
+            cuenta.triangulos+=pieza.triangulos;
         };
         const auto mesh = [&](Mesh& piece, const glm::mat4& matrix) {
             glUniformMatrix4fv(uniform, 1, GL_FALSE, glm::value_ptr(matrix));
@@ -200,7 +250,9 @@ public:
             mesh(*cerillo, rig.HandFlower(matrices));
             if (time >= 4.9f && time < 7.3f)
                 mesh(*llama, glm::scale(glm::translate(glm::mat4(1), Tip(matrices)), glm::vec3(.42f)));
-            if (Encendida(time)) mesh(*llama, glm::translate(glm::mat4(1), mecha));
+            const float brillo=toma.regresoGesto ? Suavizar((time-6.48f)/.45f)
+                                                  : (Encendida(time)?1.f:0.f);
+            if (brillo>0) mesh(*llama, glm::scale(glm::translate(glm::mat4(1), mecha),glm::vec3(brillo)));
         }
         return cuenta;
     }
@@ -223,6 +275,21 @@ private:
     VisitanteAnimado rig;
     const std::vector<Surface>& surfaces;
     std::unique_ptr<Mesh> cerillo, llama;
+    visitanteCiclo::Reloj reloj;
+    static constexpr float pausaTumba=1.0f, giroFinal=1.1f, vuelta=4.8f, giroInicio=1.6f;
+    static constexpr float duracionRegreso=giroFinal+vuelta+giroInicio;
+
+    static double EsperaInicial(Gesto gesto)
+    {
+        switch(gesto)
+        {
+        case Gesto::Veladora: return 1.35;
+        case Gesto::Oracion: return .85;
+        case Gesto::Caminar: return 1.10;
+        case Gesto::Rodillas: return 1.75;
+        }
+        return 0;
+    }
 
     static bool Encendida(float t) { return t >= instanteEncendido; }
     glm::vec3 Tip(const VisitanteAnimado::Matrices& matrices) const
@@ -234,15 +301,39 @@ private:
     {
         using namespace visitanteDatos;
         const float travel = pista.claves.back().avance;
-        const float stride = .8f;
         const float turn = glm::clamp((clave.tiempo - pista.claves[2].tiempo) /
             (pista.claves[3].tiempo - pista.claves[2].tiempo), 0.f, 1.f);
-        const float strength = (std::min)(Suavizar(clave.avance / .28f), Suavizar((travel - clave.avance) / .28f));
-        const float turnStep = sin(6.283185307f * turn);
+        rig.Place(pista.raiz + glm::vec3(clave.avance, 0, 0), pista.giro + 90.f * Suavizar(turn), surfaces);
+        return rig.Articular(PasoCaminata(clave.avance,travel,turn),0);
+    }
+
+    float DesplazamientoRegreso(float tiempo) const
+    {
+        return pista.claves.back().avance*(1.f-Suavizar((tiempo-giroFinal)/vuelta));
+    }
+
+    VisitanteAnimado::Matrices EvaluarRegreso(float tiempo)
+    {
+        const float total=pista.claves.back().avance;
+        const float avance=DesplazamientoRegreso(tiempo);
+        const float giroSalida=glm::clamp(tiempo/giroFinal,0.f,1.f);
+        const float giroLlegada=glm::clamp((tiempo-giroFinal-vuelta)/giroInicio,0.f,1.f);
+        const float pasoGiro=tiempo<giroFinal?giroSalida:giroLlegada;
+        const float yaw=pista.giro+90.f+90.f*Suavizar(giroSalida)+180.f*Suavizar(giroLlegada);
+        rig.Place(pista.raiz+glm::vec3(avance,0,0),yaw,surfaces);
+        return rig.Articular(PasoCaminata(total-avance,total,pasoGiro),0);
+    }
+
+    static Pose PasoCaminata(float avance,float travel,float turn)
+    {
+        using namespace visitanteDatos;
+        const float stride=.8f;
+        const float strength=(std::min)(Suavizar(avance/.28f),Suavizar((travel-avance)/.28f));
+        const float turnStep=sin(6.283185307f*turn);
         Pose pose = poses[0];
         pose.rootY = -.036f * strength - .018f * sin(3.141592654f * turn);
         const auto foot = [&](float offset, int thigh, int knee, int ankle, float pivot) {
-            const float phase = glm::fract(clave.avance / stride + offset);
+            const float phase = glm::fract(avance / stride + offset);
             const float swing = glm::clamp((phase - .5f) * 2.f, 0.f, 1.f);
             const float z = phase < .5f ? stride * (.25f - phase) : stride * (.5f * Suavizar(swing) - .25f);
             const float lift = .12f * sin(3.141592654f * swing) * strength + .065f * (std::max)(0.f, pivot);
@@ -250,14 +341,13 @@ private:
         };
         foot(0, MusloIzquierdo, PiernaIzquierda, PieIzquierdo, turnStep);
         foot(.5f, MusloDerecho, PiernaDerecha, PieDerecho, -turnStep);
-        const float swing = 22.f * cos(6.283185307f * clave.avance / stride) * strength;
+        const float swing = 22.f * cos(6.283185307f * avance / stride) * strength;
         pose.angles[BrazoIzquierdo].x = swing;
         pose.angles[BrazoDerecho].x = -swing;
         pose.angles[AntebrazoIzquierdo].x -= .4f * fabs(swing);
         pose.angles[AntebrazoDerecho].x -= .4f * fabs(swing);
         pose.angles[Torso].x = 3.f * strength;
-        rig.Place(pista.raiz + glm::vec3(clave.avance, 0, 0), pista.giro + 90.f * Suavizar(turn), surfaces);
-        return rig.Articular(pose, 0);
+        return pose;
     }
 
     bool ComprobarSendero(const std::vector<UnifiedSegment>& routes, const Model& paving) const

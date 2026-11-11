@@ -18,6 +18,8 @@
     <ClInclude Include="SkyBox.h" />
     <ClInclude Include="MixquicPerimeter.h" />
     <ClInclude Include="VisitanteAnimado.h" />
+    <ClInclude Include="VisitanteApariencia.h" />
+    <ClInclude Include="MixquicSuelo6C.h" />
     <ClInclude Include="VisitanteDatos.h" />
     <ClInclude Include="VisitanteKeyframes.h" />
     <ClInclude Include="VisitanteAcciones.h" />
@@ -35,6 +37,10 @@
     <None Include="Shader\lamp.vs" />
     <None Include="Shader\lighting.frag" />
     <None Include="Shader\lighting_alumbrada.frag" />
+    <None Include="Shader\HaloMixquic6C.vs" />
+    <None Include="Shader\HaloMixquic6C.frag" />
+    <None Include="images\tierra_mixquic_6c.png" />
+    <None Include="images\tierra_mixquic_6c1.png" />
     <None Include="Shader\SombraDir.vs" />
     <None Include="Shader\SombraDir.frag" />
     <None Include="Shader\HumoCopal.vs" />

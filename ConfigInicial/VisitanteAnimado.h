@@ -5,6 +5,32 @@
 #include <glm/gtc/quaternion.hpp>
 #include "VisitanteDatos.h"
 #include "VisitanteKeyframes.h"
+#include "VisitanteApariencia.h"
+
+namespace visitanteCiclo
+{
+class Reloj
+{
+public:
+    explicit Reloj(double esperaInicial=0) : espera(esperaInicial) {}
+    float Fase(double ahora,float duracion) const
+    {
+        return static_cast<float>(std::fmod((std::max)(0.0,ahora-inicio-espera),duracion));
+    }
+    void Reiniciar(double ahora) { inicio=ahora; espera=0; }
+private:
+    double inicio=0, espera;
+};
+
+struct Muestra { float tiempo; bool regreso; };
+
+inline Muestra IdaYVuelta(float fase,float duracion,float pausa)
+{
+    const float regreso=fase-duracion-pausa;
+    return regreso>0 ? Muestra{(std::max)(0.f,duracion-regreso),true}
+                     : Muestra{(std::min)(fase,duracion),false};
+}
+}
 
 // OBJ aporta vertices locales. Esta jerarquia reconstruye los pivotes de Blender.
 class VisitanteAnimado
@@ -102,6 +128,47 @@ public:
         DrawMatrices(shader, matrices, HandFlower(matrices));
     }
 
+    void ElegirAtuendo(size_t numero)
+    {
+        const auto& atuendo=visitanteApariencia::atuendos[numero];
+        escalaCabeza=atuendo.cabeza;
+        for(int parte=0;parte<visitanteDatos::BodyCount;++parte)
+        {
+            const auto& modelo=*models[parte];
+            for(const auto& mesh:modelo.Meshes())
+            {
+                glm::vec3 color=mesh.materialColor;
+                for(const auto& material:modelo.MaterialColors())
+                {
+                    if(glm::length(material.second-mesh.materialColor)<.00001f)
+                        color=visitanteApariencia::Color(atuendo,material.first,color);
+                }
+                colores[parte].push_back(color);
+            }
+        }
+        complemento=visitanteApariencia::CrearComplemento(atuendo.complemento,atuendo.pelo);
+    }
+
+    struct ConteoPieza { size_t llamadas, triangulos; };
+
+    ConteoPieza DibujarPieza(const Shader& shader,GLint uniform,int parte,const glm::mat4& matriz)
+    {
+        const auto transformacion=parte==visitanteDatos::Cabeza ? glm::scale(matriz,escalaCabeza) : matriz;
+        glUniformMatrix4fv(uniform,1,GL_FALSE,glm::value_ptr(transformacion));
+        Model& modelo=*models[parte];
+        if(parte>=visitanteDatos::BodyCount || colores[parte].empty()) modelo.Draw(shader);
+        else
+            for(size_t i=0;i<colores[parte].size();++i) modelo.DrawMesh(i,shader,&colores[parte][i]);
+        ConteoPieza resultado{modelo.Meshes().size(),modelo.TriangleCount()};
+        if(parte==visitanteDatos::Cabeza && complemento)
+        {
+            complemento->Draw(shader);
+            ++resultado.llamadas;
+            resultado.triangulos+=complemento->indices.size()/3;
+        }
+        return resultado;
+    }
+
     void DrawMatrices(Shader& shader, const Matrices& matrices, const glm::mat4& flower)
     {
         lastDrawCalls = 0;
@@ -109,10 +176,9 @@ public:
         const GLint location = glGetUniformLocation(shader.Program, "model");
         for (int i = 0; i < visitanteDatos::BodyCount; ++i)
         {
-            glUniformMatrix4fv(location, 1, GL_FALSE, glm::value_ptr(matrices[i]));
-            models[i]->Draw(shader);
-            lastDrawCalls += models[i]->Meshes().size();
-            lastTriangles += models[i]->TriangleCount();
+            const auto cuenta=DibujarPieza(shader,location,i,matrices[i]);
+            lastDrawCalls+=cuenta.llamadas;
+            lastTriangles+=cuenta.triangulos;
         }
         glUniformMatrix4fv(location, 1, GL_FALSE, glm::value_ptr(flower));
         models[visitanteDatos::Flor]->Draw(shader);
@@ -142,6 +208,15 @@ public:
         if (result.released) result.flower = placedFlower;
         return result;
     }
+
+    float TiempoCiclo(double ahora) const
+    {
+        constexpr float pausaFlor=1.6f, pausaInicial=1.15f;
+        const float duracion=visitanteDatos::Duration;
+        return visitanteCiclo::IdaYVuelta(reloj.Fase(ahora,2.f*duracion+pausaFlor+pausaInicial),
+                                         duracion,pausaFlor).tiempo;
+    }
+    void ReiniciarCiclo(double ahora) { reloj.Reiniciar(ahora); }
 
     void DrawAnimation(Shader& shader, float time)
     {
@@ -244,6 +319,10 @@ public:
 private:
     std::array<std::shared_ptr<Model>, visitanteDatos::PartCount> models;
     glm::mat4 root = glm::mat4(1);
+    std::array<std::vector<glm::vec3>,visitanteDatos::BodyCount> colores;
+    glm::vec3 escalaCabeza{1.f};
+    std::unique_ptr<Mesh> complemento;
+    visitanteCiclo::Reloj reloj{.45};
     glm::mat4 placedFlower = glm::mat4(1);
     std::vector<Bounds> supports;
     size_t lastDrawCalls = 0, lastTriangles = 0;

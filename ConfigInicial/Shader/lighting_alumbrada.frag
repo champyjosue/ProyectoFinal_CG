@@ -91,6 +91,14 @@ uniform mat4 shadowClip;
 uniform bool alumbradaEnabled = false;
 uniform float alumbradaExposure = 1.0;
 uniform float alumbradaEmission = 1.0;
+uniform bool alumbrada6c = false;
+uniform bool tierraMixquic = false;
+uniform bool revision6c1 = false;
+uniform bool tierraLigera6c1 = false;
+uniform int fuenteDecorativa = 0;
+uniform sampler2D mapaAlumbrada;
+uniform sampler2D muestraTierra;
+uniform vec2 extensionAlumbrada;
 
 // Valores base del fragmento
 vec3 baseDiffuse;
@@ -103,6 +111,29 @@ vec3 CalcDirLight(DirLight light, vec3 normal, vec3 viewDir);
 vec3 CalcPointLight(PointLight light, vec3 normal, vec3 fragPos, vec3 viewDir);
 vec3 CalcSpotLight(SpotLight light, vec3 normal, vec3 fragPos, vec3 viewDir);
 vec3 CalcSimpleLight(Light light, vec3 normal, vec3 fragPos, vec3 viewDir);
+
+void TierraRevisada(float huella)
+{
+    const mat2 giro = mat2(0.82,-0.57,0.57,0.82);
+    vec4 grano = texture(muestraTierra,FragPos.xz * 0.176);
+    float macro = grano.g;
+    if (!tierraLigera6c1)
+        macro = texture(muestraTierra,(giro*FragPos.xz)*0.049+vec2(0.31,0.63)).g;
+
+    float borde = smoothstep(0.15,0.84,huella+(macro-0.5)*0.72+(grano.g-0.5)*0.36);
+    float irregularidad = mix(macro,grano.g,0.36);
+    vec3 tierra = mix(vec3(0.164,0.126,0.090),vec3(0.275,0.227,0.171),irregularidad);
+    vec3 sendero = mix(vec3(0.271,0.212,0.158),vec3(0.431,0.370,0.303),irregularidad);
+    float polvo = smoothstep(0.37,0.70,grano.g)*borde;
+    baseDiffuse = mix(tierra,sendero,borde) * mix(0.60,1.34,grano.r);
+    baseDiffuse += vec3(0.033,0.026,0.018)*polvo;
+    baseDiffuse = mix(baseDiffuse,vec3(0.329,0.296,0.245),grano.b*0.37);
+    float margen = 1.0 - abs(borde*2.0-1.0);
+    float musgo = smoothstep(0.54,0.79,irregularidad)*(1.0-borde);
+    baseDiffuse = mix(baseDiffuse,vec3(0.174,0.192,0.106),musgo*0.33);
+    baseDiffuse = mix(baseDiffuse,vec3(0.61,0.275,0.047),grano.a*max(margen,0.16*borde)*0.78);
+    baseSpecular = vec3(0.013);
+}
 
 void main()
 {
@@ -128,6 +159,47 @@ void main()
     }
 
     vec3 norm = normalize(Normal);
+    float reboteCalido = 0.0;
+    float reboteVeladora = 0.0;
+    vec3 emisionVisible = emissionColor;
+    if (alumbrada6c)
+    {
+        if (fuenteDecorativa != 0)
+            baseDiffuse = min(baseDiffuse, vec3(0.88, 0.76, 0.64));
+        if (fuenteDecorativa == 3)
+        {
+            if (emissionColor.r > 1.7)
+                emisionVisible = vec3(2.75,1.53,0.39);
+            else if (emissionColor.r > 0.3)
+            {
+                baseDiffuse = vec3(0.47,0.225,0.055);
+                emisionVisible = vec3(0.16,0.058,0.012);
+            }
+        }
+        vec2 mapaUV = FragPos.xz / extensionAlumbrada * 0.5 + 0.5;
+        if (FragPos.y < 3.4 && all(greaterThanEqual(mapaUV,vec2(0))) && all(lessThanEqual(mapaUV,vec2(1))))
+        {
+            vec3 campo = texture(mapaAlumbrada,mapaUV).rgb;
+            reboteCalido = campo.g * (1.0 - smoothstep(1.0,3.4,FragPos.y));
+            if (revision6c1)
+                reboteVeladora = campo.b * (1.0-smoothstep(0.58,1.7,FragPos.y));
+            if (tierraMixquic && revision6c1)
+                TierraRevisada(campo.r);
+            else if (tierraMixquic)
+            {
+                vec3 suelo = texture(muestraTierra,FragPos.xz * 0.29).rgb;
+                float borde = smoothstep(0.20,0.80,campo.r + (suelo.g - 0.5) * 0.32);
+                vec3 tierra = mix(vec3(0.204,0.190,0.149),vec3(0.347,0.318,0.241),suelo.g);
+                vec3 compacta = mix(vec3(0.31,0.267,0.216),vec3(0.438,0.386,0.316),suelo.g);
+                baseDiffuse = mix(tierra,compacta,borde) * mix(0.76,1.25,suelo.r);
+                float margen = 1.0 - abs(borde * 2.0 - 1.0);
+                float hierba = smoothstep(0.56,0.78,suelo.g) * (1.0-borde);
+                baseDiffuse = mix(baseDiffuse,vec3(0.205,0.239,0.124),hierba * 0.58);
+                baseDiffuse = mix(baseDiffuse,vec3(0.68,0.29,0.035),margen * suelo.b * 0.72);
+                baseSpecular = vec3(0.018);
+            }
+        }
+    }
     vec3 viewDir = normalize(viewPos - FragPos);
 
     // 2. Acumular iluminacion
@@ -169,7 +241,11 @@ void main()
     // Llamas/vidrios visibles en la noche sin ampliar las cinco luces puntuales.
     if (alumbradaEnabled)
     {
-        result += emissionColor * emissionPulse * alumbradaEmission + objectGlow;
+        // Rebote localizado precalculado. Las cinco fuentes directas conservan su pase original.
+        float orientacion = 0.38 + 0.62 * max(norm.y,0.0);
+        result += baseDiffuse * vec3(1.04,0.51,0.16) * (reboteCalido * orientacion);
+        result += baseDiffuse * vec3(0.95,0.49,0.20) * (reboteVeladora * orientacion);
+        result += emisionVisible * emissionPulse * alumbradaEmission + objectGlow;
         result *= alumbradaExposure;
     }
     else

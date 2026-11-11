@@ -33,7 +33,7 @@ public:
         this->loadModel(path);
     }
 
-    void Draw(Shader shader, GLuint diffuseOverride = 0)
+    void Draw(const Shader& shader, GLuint diffuseOverride = 0)
     {
         for (GLuint i = 0; i < this->meshes.size(); i++)
         {
@@ -41,9 +41,9 @@ public:
         }
     }
 
-    void DrawMesh(size_t index, const Shader& shader)
+    void DrawMesh(size_t index, const Shader& shader, const glm::vec3* colorOverride = nullptr)
     {
-        meshes[index].Draw(shader);
+        meshes[index].Draw(shader,0,colorOverride);
     }
 
     const glm::vec3& BoundsMin() const { return boundsMin; }

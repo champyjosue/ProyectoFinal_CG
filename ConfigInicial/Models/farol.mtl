@@ -1,4 +1,4 @@
-# Si un canal de Kd es mayor que 1.0 el material es "brillante" (emisivo)
+# Ke define la emisión de Alumbrada. Kd conserva el aspecto de los perfiles anteriores.
 newmtl hierro
 Ka 0.20 0.20 0.20
 Kd 0.100 0.100 0.110
@@ -8,6 +8,7 @@ d 1.0
 illum 2
 
 newmtl foco
+Ke 1.960 1.240 0.410
 Ka 0.20 0.20 0.20
 Kd 2.000 1.700 0.800
 Ks 0.05 0.05 0.05

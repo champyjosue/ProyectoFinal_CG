@@ -27,6 +27,8 @@
     <ClInclude Include="SkyBox.h"><Filter>Archivos de encabezado</Filter></ClInclude>
     <ClInclude Include="MixquicPerimeter.h"><Filter>Archivos de encabezado</Filter></ClInclude>
     <ClInclude Include="VisitanteAnimado.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="VisitanteApariencia.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="MixquicSuelo6C.h"><Filter>Archivos de encabezado</Filter></ClInclude>
     <ClInclude Include="VisitanteDatos.h"><Filter>Archivos de encabezado</Filter></ClInclude>
     <ClInclude Include="VisitanteKeyframes.h"><Filter>Archivos de encabezado</Filter></ClInclude>
     <ClInclude Include="VisitanteAcciones.h"><Filter>Archivos de encabezado</Filter></ClInclude>
@@ -57,6 +59,10 @@
     <None Include="Shader\lighting.frag">
       <Filter>Archivos de origen\Shader</Filter>
     </None>
+    <None Include="Shader\HaloMixquic6C.vs"><Filter>Archivos de origen\Shader</Filter></None>
+    <None Include="Shader\HaloMixquic6C.frag"><Filter>Archivos de origen\Shader</Filter></None>
+    <None Include="images\tierra_mixquic_6c.png" />
+    <None Include="images\tierra_mixquic_6c1.png" />
     <None Include="Shader\lighting_alumbrada.frag">
       <Filter>Archivos de origen\Shader</Filter>
     </None>

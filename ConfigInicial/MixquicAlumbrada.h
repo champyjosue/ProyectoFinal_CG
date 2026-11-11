@@ -19,6 +19,15 @@ const Luz puntuales[] = {
     {{.058f,.038f,.017f},{1.79f,1.02f,.42f},{.28f,.19f,.09f},.115f,.052f},
     {{.065f,.026f,.009f},{3.30f,1.75f,.53f},{.43f,.20f,.060f},.108f,.048f}
 };
+const Luz luna6c = {{.005f,.009f,.019f},{.022f,.034f,.076f},{.023f,.032f,.057f},0,0};
+const Luz principal6c = {{.019f,.030f,.056f},{.084f,.118f,.197f},{.037f,.056f,.093f},0,0};
+const Luz puntuales6c[] = {
+    {{.085f,.039f,.011f},{2.10f,1.03f,.34f},{.43f,.22f,.072f},.155f,.070f},
+    {{.065f,.039f,.017f},{1.72f,.89f,.36f},{.24f,.12f,.05f},.120f,.092f},
+    {{.031f,.078f,.013f},{.28f,.70f,.11f},{.21f,.40f,.06f},.38f,.52f},
+    {{.059f,.035f,.014f},{1.62f,.95f,.39f},{.28f,.19f,.09f},.165f,.095f},
+    {{.070f,.028f,.009f},{3.45f,1.74f,.52f},{.43f,.20f,.060f},.100f,.045f}
+};
 const Luz foco = {{.009f,.013f,.026f},{.29f,.36f,.48f},{.070f,.083f,.118f},.115f,.048f};
 const float corteFoco=15.f, bordeFoco=25.f, exposicion=.93f, emision=.92f;
 
@@ -34,13 +43,14 @@ public:
     }
 
     void Aplicar(glm::vec3 posicionLuna,const glm::vec3 (&posiciones)[5],const float (&pulso)[5],
-                 glm::vec3 ojo,glm::vec3 rumbo) const
+                 glm::vec3 ojo,glm::vec3 rumbo,bool nueva) const
     {
         glUniform3fv(dir,1,glm::value_ptr(direccion));
         glUniform3fv(lunar.posicion,1,glm::value_ptr(posicionLuna));
-        Color(direct,principal,1.f);
-        Color(lunar,luna,1.f);
-        for(size_t i=0;i<5;++i) Puntual(puntos[i],puntuales[i],posiciones[i],pulso[i]);
+        Color(direct,nueva ? principal6c : principal,1.f);
+        Color(lunar,nueva ? luna6c : luna,1.f);
+        const auto& luces=nueva ? puntuales6c : puntuales;
+        for(size_t i=0;i<5;++i) Puntual(puntos[i],luces[i],posiciones[i],pulso[i]);
         Puntual(cam,foco,ojo,1.f);
         glUniform3fv(focoDir,1,glm::value_ptr(rumbo));
         glUniform1f(interior,std::cos(glm::radians(corteFoco)));
