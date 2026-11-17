@@ -92,6 +92,8 @@ uniform bool alumbradaEnabled = false;
 uniform float alumbradaExposure = 1.0;
 uniform float alumbradaEmission = 1.0;
 uniform bool alumbrada6c = false;
+uniform bool alumbradaCalida7D = false;
+uniform bool alumbradaRefuerzo7E = false;
 uniform bool tierraMixquic = false;
 uniform bool revision6c1 = false;
 uniform bool tierraLigera6c1 = false;
@@ -176,13 +178,24 @@ void main()
                 emisionVisible = vec3(0.16,0.058,0.012);
             }
         }
+        if (alumbradaCalida7D && fuenteDecorativa != 0)
+        {
+            if (emissionColor.r > 1.7)
+                emisionVisible = fuenteDecorativa == 1 ? vec3(2.28,1.37,.41) : vec3(3.02,1.57,.43);
+            else if (fuenteDecorativa == 3 && emissionColor.r > 0.3)
+            {
+                baseDiffuse = vec3(.49,.246,.075);
+                emisionVisible = vec3(.255,.111,.024);
+            }
+        }
+        float altura = alumbradaCalida7D ? 6.0 : 3.4;
         vec2 mapaUV = FragPos.xz / extensionAlumbrada * 0.5 + 0.5;
-        if (FragPos.y < 3.4 && all(greaterThanEqual(mapaUV,vec2(0))) && all(lessThanEqual(mapaUV,vec2(1))))
+        if (FragPos.y < altura && all(greaterThanEqual(mapaUV,vec2(0))) && all(lessThanEqual(mapaUV,vec2(1))))
         {
             vec3 campo = texture(mapaAlumbrada,mapaUV).rgb;
-            reboteCalido = campo.g * (1.0 - smoothstep(1.0,3.4,FragPos.y));
+            reboteCalido = campo.g * (1.0 - smoothstep(1.0,altura,FragPos.y));
             if (revision6c1)
-                reboteVeladora = campo.b * (1.0-smoothstep(0.58,1.7,FragPos.y));
+                reboteVeladora = campo.b * (1.0-smoothstep(0.58,alumbradaCalida7D ? 2.3 : 1.7,FragPos.y));
             if (tierraMixquic && revision6c1)
                 TierraRevisada(campo.r);
             else if (tierraMixquic)
@@ -198,6 +211,16 @@ void main()
                 baseDiffuse = mix(baseDiffuse,vec3(0.68,0.29,0.035),margen * suelo.b * 0.72);
                 baseSpecular = vec3(0.018);
             }
+        }
+        else if (tierraMixquic && revision6c1 && mapaUV.y > 1.0)
+        {
+            // Continuación visual del sendero al frente de la plataforma.
+            vec2 bordeExterior = texture(mapaAlumbrada,vec2(mapaUV.x,1.0)).rg;
+            float huellaBorde = bordeExterior.r;
+            if (alumbradaCalida7D)
+                reboteCalido = bordeExterior.g * (1.0-smoothstep(0.0,5.75,FragPos.z-extensionAlumbrada.y));
+            float huellaLlegada = 1.0-smoothstep(1.45,2.55,abs(FragPos.x));
+            TierraRevisada(mix(huellaBorde,huellaLlegada,smoothstep(0.0,0.7,FragPos.z-extensionAlumbrada.y)));
         }
     }
     vec3 viewDir = normalize(viewPos - FragPos);
@@ -242,9 +265,27 @@ void main()
     if (alumbradaEnabled)
     {
         // Rebote localizado precalculado. Las cinco fuentes directas conservan su pase original.
-        float orientacion = 0.38 + 0.62 * max(norm.y,0.0);
-        result += baseDiffuse * vec3(1.04,0.51,0.16) * (reboteCalido * orientacion);
-        result += baseDiffuse * vec3(0.95,0.49,0.20) * (reboteVeladora * orientacion);
+        if (alumbradaCalida7D)
+        {
+            // El rebote vertical conserva legibles las flores, tallas y relieves.
+            float orientacion = 0.57 + 0.43 * max(norm.y,0.0);
+            vec3 calor = vec3(.050,.030,.016)
+                + vec3(1.24,.70,.31) * (reboteCalido * orientacion)
+                + vec3(.91,.48,.18) * (reboteVeladora * orientacion);
+            if (alumbradaRefuerzo7E)
+            {
+                // Refuerza el ámbar tenue en lugar de sumar exposición a la ofrenda.
+                float relleno = smoothstep(.015,.24,reboteCalido) * (1.0-smoothstep(.52,.90,reboteCalido));
+                calor += vec3(.168,.090,.035) * relleno * orientacion;
+            }
+            result += baseDiffuse * calor;
+        }
+        else
+        {
+            float orientacion = 0.38 + 0.62 * max(norm.y,0.0);
+            result += baseDiffuse * vec3(1.04,0.51,0.16) * (reboteCalido * orientacion);
+            result += baseDiffuse * vec3(0.95,0.49,0.20) * (reboteVeladora * orientacion);
+        }
         result += emisionVisible * emissionPulse * alumbradaEmission + objectGlow;
         result *= alumbradaExposure;
     }

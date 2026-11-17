@@ -13,7 +13,7 @@ struct Dibujo
 class Vegetacion
 {
 public:
-    bool Cargar(const Model& pavimento, const std::vector<Bounds>& protegidos)
+    bool Cargar(const Model& pavimento, const std::vector<Bounds>& protegidos,bool reforzar)
     {
         malla=std::make_unique<Model>("Models/Vegetacion_Mixquic/vegetacion_mixquic.obj");
         const auto& prototipos=malla->Meshes();
@@ -54,18 +54,36 @@ public:
                 baldosas.push_back({glm::min(a,glm::min(b,c)),glm::max(a,glm::max(b,c))});
             }
         std::array<unsigned,4> cuenta={};
-        for(const auto& semilla:distribucion)
+        std::vector<Semilla> semillas(std::begin(distribucion),std::end(distribucion));
+        const size_t anteriores=semillas.size();
+        if(reforzar) semillas.insert(semillas.end(),std::begin(refuerzo7e),std::end(refuerzo7e));
+        size_t indice=0, nuevas=0;
+        for(const auto& semilla:semillas)
         {
+            const bool nueva=indice++>=anteriores;
             const glm::vec2 centro(semilla.x,semilla.z);
             const float radio=radios[semilla.tipo]*semilla.escala;
             if(std::abs(centro.x)+radio>23.92f || centro.y-radio < -30.91f ||
                centro.y+radio>29.76f || std::abs(centro.x)-radio<6.15f ||
                (centro.y < -18.f && std::abs(centro.x)-radio<8.40f))
+            {
+                if(nueva) continue;
                 return Error("perimetro o corredor visual",&semilla);
-            for(const auto& b:protegidos)
-                if(Distancia(centro,b)<radio+.14f) return Error("tumba, adorno, actor o arquitectura",&semilla);
-            for(const auto& b:baldosas)
-                if(Distancia(centro,b)<radio+.20f) return Error("pavimento",&semilla);
+            }
+            const auto cerca=[&](const std::vector<Bounds>& cajas,float margen)
+            {
+                return std::any_of(cajas.begin(),cajas.end(),[&](const Bounds& caja) {
+                    return Distancia(centro,caja)<radio+margen;
+                });
+            };
+            if(cerca(protegidos,.14f) || cerca(baldosas,.20f))
+            {
+                if(nueva) continue;
+                return Error("tumba, adorno, arquitectura o pavimento",&semilla);
+            }
+            if(nueva && std::any_of(plantas.begin(),plantas.end(),[&](const Planta& planta) {
+                return Distancia(centro,planta.caja)<radio+.09f;
+            })) continue;
 
             auto modelo=glm::translate(glm::mat4(1),{centro.x,-alturasBase[semilla.tipo]*semilla.escala,centro.y});
             modelo=glm::rotate(modelo,glm::radians(semilla.giro),{0,1,0});
@@ -85,9 +103,16 @@ public:
                     {centro.x+anchoTronco,2.1f,centro.y+anchoTronco}});
             }
             ++cuenta[semilla.tipo];
+            if(nueva)
+            {
+                ++nuevas;
+                std::cout<<"7E PLANTA: tipo="<<semilla.tipo<<" x="<<semilla.x<<" z="<<semilla.z<<std::endl;
+            }
             maximo.triangulos+=static_cast<unsigned>(esperado[semilla.tipo]);
             ++maximo.llamadas;
         }
+        if(reforzar)
+            std::cout<<"VEGETACION 7E: nuevas="<<nuevas<<std::endl;
         std::cout<<"VEGETACION INVENTARIO: cipreses="<<cuenta[0]<<" fresnos="<<cuenta[1]
             <<" arbustos="<<cuenta[2]<<" macollos="<<cuenta[3]
             <<" atlas="<<ancho<<"x"<<alto<<" llamadas_max="<<maximo.llamadas

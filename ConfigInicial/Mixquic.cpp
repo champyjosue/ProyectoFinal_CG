@@ -176,6 +176,40 @@ struct Placement
     glm::mat4 matrix;
     Bounds bounds;
 };
+// Limites conservadores para el pase de color. Los demas pases mantienen su propia visibilidad.
+class PlacementFrustum
+{
+public:
+    void Update(const glm::mat4& clip)
+    {
+        const glm::mat4 rows = glm::transpose(clip);
+        planes[0] = rows[3] + rows[0];
+        planes[1] = rows[3] - rows[0];
+        planes[2] = rows[3] + rows[1];
+        planes[3] = rows[3] - rows[1];
+        planes[4] = rows[3] + rows[2];
+        planes[5] = rows[3] - rows[2];
+        for (glm::vec4& plane : planes)
+            plane /= glm::length(glm::vec3(plane));
+    }
+
+    bool Intersects(const Bounds& bounds) const
+    {
+        for (const glm::vec4& plane : planes)
+        {
+            const glm::vec3 corner(plane.x >= 0.0f ? bounds.max.x : bounds.min.x,
+                                   plane.y >= 0.0f ? bounds.max.y : bounds.min.y,
+                                   plane.z >= 0.0f ? bounds.max.z : bounds.min.z);
+            if (glm::dot(plane, glm::vec4(corner, 1.0f)) < -0.02f)
+                return false;
+        }
+        return true;
+    }
+
+private:
+    glm::vec4 planes[6];
+};
+
 struct Surface
 {
     glm::vec3 center, size, color;
@@ -666,6 +700,389 @@ void SceneBudget(const std::vector<Model*>& loaded, const std::vector<Placement>
 #include "MixquicAlumbrada.h"
 #include "MixquicSuelo6C.h"
 
+// Los índices se expresan con los identificadores G del plano de 62 tumbas.
+static std::vector<Placement> CrearArreglos7B(
+    const std::vector<Placement>& graves, const std::vector<Placement>& visibleGraves,
+    const std::vector<Placement>& decorations, const std::vector<Surface>& surfaces,
+    const Model& paving, const vegetacion4f::Vegetacion& vegetation,
+    std::vector<Bounds> obstacles, Model& ramo, Model& macizo, Model& maceta,
+    Model& petals, const Model& veladora)
+{
+    enum Tipo { Ramo, Macizo, Maceta, Petalos };
+    struct Arreglo { size_t tumba; Tipo tipo; float escala, giro; bool juntoVeladora; };
+    const Arreglo plan[] = {
+        {1,Macizo,.83f,12,false}, {1,Petalos,.55f,-14,false},
+        {4,Maceta,1.32f,21,true}, {6,Ramo,1.13f,-22,true},
+        {8,Maceta,1.20f,-12,true}, {9,Ramo,1.22f,20,true}, {9,Petalos,.57f,16,false},
+        {11,Ramo,1.06f,-12,true}, {12,Maceta,1.26f,34,false},
+        {15,Petalos,.57f,-24,false}, {16,Maceta,1.30f,30,true},
+        {17,Maceta,1.22f,-29,true}, {17,Macizo,.86f,23,false}, {18,Ramo,1.12f,23,false},
+        {22,Petalos,.61f,6,false}, {25,Maceta,1.38f,-17,true},
+        {27,Ramo,1.20f,-31,false}, {31,Maceta,1.16f,16,true},
+        {34,Maceta,1.31f,35,false}, {38,Ramo,1.18f,-21,true},
+        {40,Macizo,.80f,-22,false}, {40,Petalos,.54f,12,false},
+        {42,Maceta,1.26f,9,true}, {47,Maceta,1.28f,25,true},
+        {49,Ramo,1.19f,-18,true}, {49,Petalos,.56f,-16,false},
+        {51,Maceta,1.14f,-16,true}, {54,Maceta,1.25f,-34,true},
+        {55,Ramo,1.23f,8,true}, {57,Petalos,.63f,23,false},
+        {60,Maceta,1.33f,33,true}, {61,Ramo,1.14f,-30,false},
+        {65,Maceta,1.24f,-25,true}, {65,Macizo,.93f,-14,false}, {70,Maceta,1.30f,-21,false},
+        {72,Petalos,.60f,35,false}, {73,Maceta,1.37f,-32,true},
+        {74,Macizo,.90f,42,false}, {74,Petalos,.63f,-7,false},
+        {75,Maceta,1.25f,25,true}, {76,Macizo,.89f,-21,true},
+        {77,Petalos,.61f,12,false}, {77,Petalos,.56f,-24,false}, {77,Petalos,.46f,15,false}
+    };
+    Model* models[] = {&ramo,&macizo,&maceta,&petals};
+    const char* names[] = {"ramo","macizo","maceta","petalos"};
+
+    for (const auto& grave : visibleGraves) obstacles.push_back(grave.bounds);
+    for (const auto& prop : decorations) obstacles.push_back(prop.bounds);
+    for (const auto& surface : surfaces) if (surface.size.y > .15f)
+        obstacles.push_back({surface.center-surface.size*.5f,surface.center+surface.size*.5f});
+    vegetation.AgregarPerimetro(obstacles);
+
+    // Conserva espacio para el cuerpo y los accesorios animados, además de las rutas validadas.
+    const Bounds actores[] = {
+        {{9.30f,0,4.95f},{12.35f,2.2f,7.32f}}, {{6.70f,0,-6.90f},{9.45f,2.2f,-4.40f}},
+        {{-11.35f,0,-4.10f},{-9.15f,2.2f,-1.35f}}, {{-9.85f,0,11.05f},{-6.65f,2.2f,13.60f}},
+        {{4.95f,0,16.25f},{9.70f,2.2f,18.25f}}
+    };
+    obstacles.insert(obstacles.end(),std::begin(actores),std::end(actores));
+    std::vector<Bounds> reserved;
+    const glm::vec3 margin(navegacion4e::Navegacion::radio + .055f,0,navegacion4e::Navegacion::radio + .055f);
+    for (const auto& route : navegacion4e::rutas62)
+        for (size_t i=1; i<route.puntos.size(); ++i)
+        {
+            const glm::vec3 a(route.puntos[i-1].x,0,route.puntos[i-1].y);
+            const glm::vec3 b(route.puntos[i].x,0,route.puntos[i].y);
+            reserved.push_back({glm::min(a,b)-margin,glm::max(a,b)+margin});
+        }
+
+    // Una caja por triángulo conserva libre todo el ancho del pavimento para las piezas sólidas.
+    std::vector<Bounds> tiles;
+    for (const auto& mesh : paving.Meshes())
+        for (size_t i=0; i<mesh.indices.size(); i+=3)
+        {
+            const auto a=mesh.vertices[mesh.indices[i]].Position;
+            const auto b=mesh.vertices[mesh.indices[i+1]].Position;
+            const auto c=mesh.vertices[mesh.indices[i+2]].Position;
+            tiles.push_back({glm::min(a,glm::min(b,c)),glm::max(a,glm::max(b,c))});
+        }
+
+    std::vector<Placement> flowers;
+    std::set<size_t> decoratedGraves;
+    size_t counts[4]={}, besideCandles=0, calls=0, triangles=0;
+    const auto overlaps = [](const Bounds& box,const std::vector<Bounds>& others)
+    {
+        return std::any_of(others.begin(),others.end(),
+            [&](const Bounds& other) { return OverlapXZ(box,other); });
+    };
+    for (const auto& spec : plan)
+    {
+        const auto& grave=graves[spec.tumba-1].bounds;
+        const auto center=(grave.min+grave.max)*.5f;
+        const float side=spec.tumba%2 ? -1.f : 1.f;
+        const float xOffsets[]={side*.45f,0,-side*.43f,side*.08f};
+        const float zOffsets[]={.41f,-.4f,.15f,-.18f};
+        Model& model=*models[spec.tipo];
+        const bool flat=spec.tipo==Petalos;
+        const auto footprint=Grounded(model,{0,0,0},glm::vec3(spec.escala),spec.giro).bounds.max;
+        float score=1e6f;
+        float candleDistance=0;
+        Placement best{};
+        const auto tryAt=[&](float x,float z,float preference)
+        {
+            const float clear=flat ? .027f : .085f;
+            const glm::vec3 edge(footprint.x+clear,0,footprint.z+clear);
+            const Bounds box={glm::vec3(x,0,z)-edge,glm::vec3(x,0,z)+edge};
+            if (box.min.x < -23.8f || box.max.x > 23.8f || box.min.z < -30.5f || box.max.z > 27.f) return;
+            if (overlaps(box,obstacles) || (!flat && (overlaps(box,reserved) || overlaps(box,tiles)))) return;
+            const float support=UnifiedSupportPoint(x,z,surfaces,paving);
+            for (int ix=-1; ix<=1; ++ix)
+                for (int iz=-1; iz<=1; ++iz)
+                    if (std::abs(UnifiedSupportPoint(x+ix*footprint.x,z+iz*footprint.z,surfaces,paving)-support)>.0025f)
+                        return;
+            float distance=6.f;
+            if (!flat)
+                for (const auto& decoration : decorations) if (decoration.model==&veladora)
+                {
+                    const auto candle=(decoration.bounds.min+decoration.bounds.max)*.5f;
+                    distance=glm::min(distance,glm::length(glm::vec2(x-candle.x,z-candle.z)));
+                }
+            const float cost=preference+(spec.juntoVeladora ? .42f*distance : 0.f);
+            if (cost>=score) return;
+            score=cost;
+            candleDistance=distance;
+            best=Grounded(model,{x,support+(flat ? .002f : 0.f),z},glm::vec3(spec.escala),spec.giro);
+        };
+        // Los pétalos salen primero al pie; los arreglos alternan esquinas y costados.
+        for (float gap : {.13f,.23f,.35f,.50f,.66f,.84f,1.03f,1.24f,1.43f})
+        {
+            for (float shift : xOffsets)
+            {
+                const float x=center.x+shift*(grave.max.x-grave.min.x);
+                tryAt(x,grave.max.z+footprint.z+gap,gap+(flat ? 0.f : .045f)+std::abs(shift)*.16f);
+                tryAt(x,grave.min.z-footprint.z-gap,gap+.37f+std::abs(shift)*.16f);
+            }
+            for (float shift : zOffsets)
+            {
+                const float z=center.z+shift*(grave.max.z-grave.min.z);
+                const float left=grave.min.x-footprint.x-gap, right=grave.max.x+footprint.x+gap;
+                const float offset=gap+std::abs(shift)*.13f+(flat ? .21f : 0.f);
+                tryAt(side<0 ? left : right,z,offset);
+                tryAt(side<0 ? right : left,z,offset+.08f);
+            }
+        }
+        if (!best.model) continue;
+        flowers.push_back(best);
+        obstacles.push_back(best.bounds);
+        decoratedGraves.insert(spec.tumba);
+        ++counts[spec.tipo];
+        if (!flat && candleDistance <= 1.15f) ++besideCandles;
+        calls+=best.model->Meshes().size();
+        triangles+=best.model->TriangleCount();
+        const auto p=(best.bounds.min+best.bounds.max)*.5f;
+        std::cout<<"FLOR7B G"<<spec.tumba<<" "<<names[spec.tipo]<<" x="<<p.x<<" z="<<p.z
+                 <<" base="<<best.bounds.min.y<<" vela_dist="<<candleDistance<<std::endl;
+    }
+    std::cout<<"FLORES 7B: instancias="<<flowers.size()<<" tumbas="<<decoratedGraves.size()
+             <<" ramos="<<counts[Ramo]<<" macizos="<<counts[Macizo]<<" macetas="<<counts[Maceta]
+             <<" petalos="<<counts[Petalos]<<" junto_veladoras="<<besideCandles
+             <<" llamadas="<<calls<<" triangulos="<<triangles<<std::endl;
+    return flowers;
+}
+
+// Tramo de llegada frente al muro de la plataforma ampliada.
+constexpr float arrivalStartZ = 40.0f;
+constexpr float arrivalPitch = 2.f;
+constexpr float arrivalGroundEndZ = 42.0f;
+
+struct Adornos7E
+{
+    std::unique_ptr<Model> monticuloFlores,monticuloPetalos;
+    std::vector<Placement> monticulos,luces;
+    std::vector<Bounds> solidos;
+
+    bool Cargar(const Model& pavimento,const std::vector<Surface>& superficies,
+                std::vector<Bounds> ocupados,Model& vela,Model& veladora)
+    {
+        monticuloFlores=std::make_unique<Model>("Models/Alumbrada_Mixquic_7E/monticulo_flores.obj",true);
+        monticuloPetalos=std::make_unique<Model>("Models/Alumbrada_Mixquic_7E/monticulo_petalo.obj",true);
+        if(!monticuloFlores->IsLoaded() || !monticuloPetalos->IsLoaded()) return false;
+        std::vector<Bounds> reservas={
+            {{4.95f,0,16.18f},{9.75f,2.2f,18.30f}},
+            {{9.30f,0,4.92f},{12.35f,2.2f,7.32f}},
+            {{6.70f,0,-6.90f},{9.45f,2.2f,-4.40f}},
+            {{-11.35f,0,-4.10f},{-9.15f,2.2f,-1.35f}},
+            {{-9.85f,0,11.05f},{-6.65f,2.2f,13.60f}}
+        };
+        const glm::vec3 margen(.455f,0,.455f);
+        for(const auto& ruta : navegacion4e::rutas62)
+            for(size_t i=1;i<ruta.puntos.size();++i)
+            {
+                const glm::vec3 a(ruta.puntos[i-1].x,0,ruta.puntos[i-1].y);
+                const glm::vec3 b(ruta.puntos[i].x,0,ruta.puntos[i].y);
+                reservas.push_back({glm::min(a,b)-margen,glm::max(a,b)+margen});
+            }
+        const auto colocar=[&](Model& modelo,float x,float z,float escala,float giro,bool tierra,
+                               std::vector<Placement>& salida)
+        {
+            const float nivel=UnifiedSupportPoint(x,z,superficies,pavimento);
+            if(tierra && nivel>.003f) return false;
+            const auto pieza=Grounded(modelo,{x,nivel,z},glm::vec3(escala),giro);
+            const auto b=pieza.bounds;
+            const glm::vec3 borde(tierra?.055f:.06f,0,tierra?.055f:.06f);
+            const Bounds prueba={b.min-borde,b.max+borde};
+            for(const auto& r : reservas) if(OverlapXZ(prueba,r)) return false;
+            for(const auto& r : ocupados) if(OverlapXZ(prueba,r)) return false;
+            for(float u : {0.f,.5f,1.f})
+                for(float v : {0.f,.5f,1.f})
+                    if(std::abs(nivel-UnifiedSupportPoint(glm::mix(b.min.x,b.max.x,u),glm::mix(b.min.z,b.max.z,v),
+                           superficies,pavimento))>.003f) return false;
+            ocupados.push_back(b);
+            solidos.push_back(b);
+            salida.push_back(pieza);
+            std::cout<<(tierra?"7E MONTICULO":"7E LUMINARIA")<<" x="<<x<<" z="<<z<<" y="<<nivel<<std::endl;
+            return true;
+        };
+        struct Sepultura { float x,z,giro; };
+        const Sepultura poniente[]={{-11.55f,19.10f,90},{-11.80f,21.10f,90},
+            {-8.85f,18.80f,90},{-8.85f,22.70f,90},{-9.05f,22.45f,90},{-8.75f,21.88f,90},
+            {-11.60f,23.00f,0},{-11.70f,23.23f,90},{-11.82f,22.86f,90},{-14.40f,22.00f,90},
+            {-11.62f,26.00f,90},{-9.10f,26.05f,90},{-8.40f,26.03f,90}};
+        const Sepultura oriente[]={{8.00f,19.40f,90},{9.20f,20.70f,90},
+            {7.60f,22.40f,90},{8.30f,26.20f,90}};
+        const auto sembrar=[&](const auto& parcela)
+        {
+            size_t n=0;
+            for(const auto& p : parcela)
+            {
+                const auto i=monticulos.size();
+                if(colocar(i%2 ? *monticuloFlores : *monticuloPetalos,p.x,p.z,
+                           i%2 ? .78f : .86f,p.giro,true,monticulos)) ++n;
+                if(n==4) break;
+            }
+            return n;
+        };
+        const size_t oeste=sembrar(poniente),este=sembrar(oriente);
+        const glm::vec2 candidatos[]={
+            {-2.20f,31.72f},{2.20f,31.72f},{-1.93f,26.64f},{1.92f,26.59f},{-2.04f,23.14f},{2.05f,23.30f},
+            {-2.30f,21.25f},{2.28f,21.08f},{-6.70f,19.37f},{6.47f,19.62f},{-6.16f,17.70f},{3.40f,16.82f},
+            {-4.20f,13.13f},{4.08f,13.45f},{-4.45f,10.60f},{4.13f,10.36f},
+            {-2.70f,3.70f},{2.80f,3.38f},{-2.10f,-1.75f},{2.12f,-1.61f},
+            {-3.53f,-19.42f},{3.30f,-19.82f},{-3.82f,-20.46f},{3.60f,-20.99f},
+            {-3.82f,-21.65f},{3.85f,-21.85f},{-4.52f,-22.47f},{4.79f,-22.31f},
+            {-5.23f,-23.67f},{5.17f,-23.78f},{-5.55f,-24.58f},{5.45f,-24.52f}
+        };
+        size_t index=0,cirios=0,vasos=0;
+        for(const auto& c : candidatos)
+        {
+            const bool cirio=index%3==0;
+            const float escala=.84f+.095f*float(index++%4);
+            if(colocar(cirio ? vela : veladora,c.x,c.y,escala,0,false,luces))
+                (cirio ? cirios : vasos)++;
+        }
+        std::cout<<"ADORNOS 7E: poniente="<<oeste<<" oriente="<<este<<" velas_sueltas="<<cirios
+                 <<" veladoras_sueltas="<<vasos<<" veladoras_monticulos="<<monticulos.size()*4<<std::endl;
+        if(oeste!=4 || este!=4 || luces.size()<16)
+        {
+            std::cerr<<"ERROR 7E: espacios insuficientes para la composicion"<<std::endl;
+            return false;
+        }
+        return true;
+    }
+};
+
+
+struct Ceremonia7C
+{
+    std::vector<std::unique_ptr<Model>> modelos;
+    std::vector<Placement> piezas;
+    std::vector<Bounds> solidos;
+    float alturaLibre=0.f;
+
+    bool Cargar(const Model& pavimento, const std::vector<Surface>& superficies,
+                const std::vector<Bounds>& ocupados)
+    {
+        constexpr float zArco=24.15f;
+        const char* paths[]={
+            "Models/Ceremonia_Mixquic_7C/monticulo_poniente.obj",
+            "Models/Ceremonia_Mixquic_7C/monticulo_oriente.obj",
+            "Models/Ceremonia_Mixquic_7C/arco_floral.obj",
+            "Models/Ceremonia_Mixquic_7C/jarron_iglesia.obj"
+        };
+        for (const auto path : paths)
+        {
+            modelos.push_back(std::make_unique<Model>(path,true));
+            if (!modelos.back()->IsLoaded()) return Error(path);
+        }
+        for (size_t i=0; i<2; ++i)
+        {
+            size_t llamas=0;
+            for (const auto& mesh : modelos[i]->Meshes())
+                if (glm::length(mesh.materialEmission)>0.1f) ++llamas;
+            if (llamas!=2) return Error("faltan los dos materiales de llama de los monticulos");
+        }
+
+        const auto poner=[&](size_t modelo,float x,float z,float giro=0.f)
+        {
+            const float y=UnifiedSupportPoint(x,z,superficies,pavimento);
+            piezas.push_back(Grounded(*modelos[modelo],{x,y,z},glm::vec3(1),giro));
+        };
+        poner(0,-5.85f,26.05f);
+        poner(1,6.40f,26.05f);
+        poner(2,0,zArco);
+        poner(3,-2.80f,-2.55f,13.f);
+        poner(3,2.80f,-2.55f,-21.f);
+        for (size_t i : {0u,1u,3u,4u}) solidos.push_back(piezas[i].bounds);
+
+        const auto& arco=piezas[2];
+        const float piso=arco.bounds.min.y;
+        const Bounds cuerpo={{-1.55f,piso,zArco-.5f},{1.55f,EYE_HEIGHT+navegacion4e::Navegacion::radio,zArco+.5f}};
+        Bounds columnas[2]={{glm::vec3(1e6f),glm::vec3(-1e6f)},{glm::vec3(1e6f),glm::vec3(-1e6f)}};
+        alturaLibre=arco.bounds.max.y;
+        for (const auto& mesh : arco.model->Meshes())
+            for (size_t i=0; i<mesh.indices.size(); i+=3)
+            {
+                glm::vec3 p[3];
+                for (size_t j=0; j<3; ++j)
+                    p[j]=glm::vec3(arco.matrix*glm::vec4(mesh.vertices[mesh.indices[i+j]].Position,1));
+                const Bounds cara={glm::min(p[0],glm::min(p[1],p[2])),glm::max(p[0],glm::max(p[1],p[2]))};
+                if (UnifiedOverlap3(cuerpo,cara)) return Error("el arco toca la envolvente del jugador");
+                if (OverlapXZ(cuerpo,cara)) alturaLibre=glm::min(alturaLibre,cara.min.y);
+                for (const glm::vec3& v : p)
+                {
+                    if (v.y>cuerpo.max.y) continue;
+                    auto& columna=columnas[v.x<0 ? 0 : 1];
+                    columna.min=glm::min(columna.min,v);
+                    columna.max=glm::max(columna.max,v);
+                }
+            }
+        alturaLibre-=piso;
+        if (alturaLibre<3.f || columnas[0].max.x>=-1.9f || columnas[1].min.x<=1.9f)
+            return Error("despeje reducido en el arco");
+        solidos.insert(solidos.end(),std::begin(columnas),std::end(columnas));
+        for (size_t i=0; i<solidos.size(); ++i)
+        {
+            const auto& caja=solidos[i];
+            if (caja.min.z < -31.f || caja.max.z > MixquicPerimeter::frontZ || caja.min.x < -24.f || caja.max.x > 24.f)
+                return Error("ornamento fuera del recinto");
+            for (const auto& fijo : ocupados)
+                if (UnifiedOverlap3(caja,fijo)) return Error("ornamento sobre un elemento existente");
+            for (size_t j=0; j<i; ++j)
+                if (OverlapXZ(caja,solidos[j])) return Error("ornamentos superpuestos");
+            for (float x : {0.f,.5f,1.f})
+                for (float z : {0.f,.5f,1.f})
+                    if (std::abs(caja.min.y-UnifiedSupportPoint(glm::mix(caja.min.x,caja.max.x,x),
+                        glm::mix(caja.min.z,caja.max.z,z),superficies,pavimento))>.003f)
+                        return Error("apoyo irregular en el suelo");
+        }
+        size_t tri=0,llamadas=0;
+        for (const auto& p : piezas) { tri+=p.model->TriangleCount(); llamadas+=p.model->Meshes().size(); }
+        std::cout<<"CEREMONIA 7C: monticulos=2 veladoras=16 arcos=1 jarrones=2"
+                 <<" altura_arco="<<arco.bounds.max.y-piso<<" altura_libre="<<alturaLibre
+                 <<" ancho_libre="<<columnas[1].min.x-columnas[0].max.x
+                 <<" z_arco="<<zArco<<" triangulos="<<tri<<" llamadas="<<llamadas<<std::endl;
+        return true;
+    }
+
+    bool ComprobarPaso(const navegacion4e::Navegacion& nav,const MixquicPerimeter& porton) const
+    {
+        if (piezas.empty()) return true;
+        const glm::vec2 fuera(0,arrivalStartZ), dentro(0,20.8f);
+        bool normal=glm::length(nav.Desplazar(fuera,dentro,&porton)-dentro)<.015f &&
+            glm::length(nav.Desplazar(dentro,fuera,&porton)-fuera)<.015f;
+        bool lados=true;
+        const auto& arco=piezas[2].bounds;
+        for (float x : {-1.15f,1.15f})
+        {
+            const glm::vec2 frente(x,arco.max.z+1.f), fondo(x,arco.min.z-1.f);
+            lados=lados && glm::length(nav.Desplazar(frente,fondo,&porton)-fondo)<.015f &&
+                glm::length(nav.Desplazar(fondo,frente,&porton)-frente)<.015f;
+        }
+        bool solidez=true;
+        for (const auto& b : solidos)
+        {
+            const auto centro=(b.min+b.max)*.5f;
+            solidez=solidez && !nav.Libre({centro.x,centro.z},&porton);
+        }
+        const float z=(arco.min.z+arco.max.z)*.5f;
+        const glm::vec2 eje(0,z);
+        const bool columnas=nav.Desplazar(eje,{-2.70f,z},&porton).x > -2.20f &&
+            nav.Desplazar(eje,{2.70f,z},&porton).x < 2.20f;
+        std::cout<<"CEREMONIA PASO 7C: entrada_y_salida="<<normal
+                 <<" lados_arco="<<lados<<" obstaculos_solidos="<<solidez<<" columnas_bloquean="<<columnas<<std::endl;
+        return normal && lados && solidez && columnas;
+    }
+
+private:
+    static bool Error(const char* detalle)
+    {
+        std::cerr<<"ERROR 7C: "<<detalle<<std::endl;
+        return false;
+    }
+};
+
 static MixquicPerimeter* walkingPerimeter = nullptr;
 static bool replayVisitor = false;
 static navegacion4e::Navegacion* walkingNavigation = nullptr;
@@ -694,9 +1111,12 @@ static bool ValidatePerimeterControls(GLFWwindow* window, MixquicPerimeter& peri
         KeyCallback(window, key, 0, GLFW_RELEASE, 0);
     };
 
-    stand(0, 31.5f);
+    stand(0, arrivalStartZ);
+    const bool startsOutside = position().y > MixquicPerimeter::frontZ &&
+        position().y <= arrivalGroundEndZ - navegacion4e::Navegacion::radio &&
+        perimeter.PasoLibre(position()) && (!walkingNavigation || walkingNavigation->Libre(position(), &perimeter));
     pressR(); animate();
-    walk(GLFW_KEY_W, 35);
+    walk(GLFW_KEY_W, 60);
     const bool closedStops = perimeter.Angle() == 0.0f && position().y >= 30.85f;
     pressR(); animate();
     walk(GLFW_KEY_W, 40);
@@ -727,12 +1147,15 @@ static bool ValidatePerimeterControls(GLFWwindow* window, MixquicPerimeter& peri
     camera = savedCamera;
     deltaTime = savedTime;
     perimeter.SetCaptureAngle(perimeter.openAngle);
+    std::cout << "LLEGADA PRUEBA: inicio_exterior=" << startsOutside
+              << " inicio_z=" << arrivalStartZ << " porton_z=" << MixquicPerimeter::frontZ
+              << " entrada_caminando=" << entered << " salida=" << exited << std::endl;
     std::cout << "PORTON PRUEBAS: cerrado_bloquea=" << closedStops << " entrada=" << entered
               << " salida=" << exited << " cierre_ocupado=" << cancelsClosing
               << " sale_umbral=" << leavesThreshold << " pausa_apertura=" << pausesOpening
               << " reanuda_apertura=" << resumesOpening << " muro_lateral=" << stopsAtSide
               << " muro_trasero=" << stopsAtRear << std::endl;
-    return closedStops && entered && exited && cancelsClosing && leavesThreshold &&
+    return startsOutside && closedStops && entered && exited && cancelsClosing && leavesThreshold &&
            pausesOpening && resumesOpening && stopsAtSide && stopsAtRear;
 }
 
@@ -752,7 +1175,8 @@ static bool ValidateNavigation4E(GLFWwindow* window, MixquicPerimeter& perimeter
         camera.SetWalkingMode(EYE_HEIGHT,3.5f);
     };
     const glm::vec3 start(0,EYE_HEIGHT,28);
-    const glm::vec3 diagonalStart(0,EYE_HEIGHT,26);
+    // El patio exterior prueba la normalizacion diagonal en espacio libre.
+    const glm::vec3 diagonalStart(0,EYE_HEIGHT,39);
     const auto advance = [&](int subdivisions, bool run, bool diagonal) {
         setPosition(diagonal ? diagonalStart : start);
         press(GLFW_KEY_W,GLFW_PRESS);
@@ -795,10 +1219,10 @@ static bool ValidateNavigation4E(GLFWwindow* window, MixquicPerimeter& perimeter
     nav.visitantes = {{5.7f,17.23f}};
     const bool actor = nav.Desplazar({5.7f,19},{5.7f,16.9f},&perimeter).y >= 17.919f;
     nav.visitantes = savedVisitors;
-    setPosition({0,EYE_HEIGHT,31.5f});
+    setPosition({0,EYE_HEIGHT,arrivalGroundEndZ - .5f});
     press(GLFW_KEY_S,GLFW_PRESS);
     DoMovement(.25f);
-    const bool limit = fabs(camera.GetPosition().z - 31.65f) < .001f;
+    const bool limit = fabs(camera.GetPosition().z - (arrivalGroundEndZ - navegacion4e::Navegacion::radio)) < .001f;
     press(GLFW_KEY_S,GLFW_RELEASE);
     camera=savedCamera;
     std::cout << "CONTROL 4E: caminar=" << glm::length(walkView-start)
@@ -813,6 +1237,8 @@ int main(int argc, char** argv)
 {
     bool validate = false;
     bool benchmark = false;
+    bool floresTumbas = true;
+    bool ornamentosCeremoniales = true;
     bool useSkybox = true;
     bool usePerimeter = true;
     bool articulatedAmbient = true;
@@ -829,7 +1255,9 @@ int main(int argc, char** argv)
     bool visitorDemoCamera = false;
     int visitorPose = 0;
     const visitanteAcciones::Pista* demoAction = nullptr;
-    bool alumbradaAnterior = false, tierraNatural = true;
+    bool alumbradaAnterior = false, tierraNatural = true, alumbradaCalida = true;
+    bool fase7e = true, plantas7e = true, luz7e = true;
+    bool descartarFueraDeVista = true;
     bool revision6c1 = true, tierraLigera6c1 = false;
     std::string captureDirectory;
     for (int i = 1; i < argc; ++i)
@@ -848,11 +1276,19 @@ int main(int argc, char** argv)
         else if (argument == "--demo-ambiente=globos") ambientDemo = ambienteMixquic::Demo::Globos;
         else if (argument == "--globos=on") useLanterns = true;
         else if (argument == "--globos=off") useLanterns = false;
+        else if (argument == "--fase7e=off") fase7e = false;
+        else if (argument == "--optimizacion-7f=off") descartarFueraDeVista = false;
+        else if (argument == "--vegetacion-7e=off") plantas7e = false;
+        else if (argument == "--luz-7e=off") luz7e = false;
         else if (argument == "--vegetacion=on") useVegetation = true;
         else if (argument == "--vegetacion=off") useVegetation = false;
-        else if (argument == "--iluminacion=original") { cinematica = false; alumbradaAnterior = false; }
-        else if (argument == "--iluminacion=alumbrada") { cinematica = true; alumbradaAnterior = false; }
-        else if (argument == "--iluminacion=alumbrada-6b") { cinematica = true; alumbradaAnterior = true; }
+        else if (argument == "--iluminacion=original" || argument == "--iluminacion=alumbrada" ||
+                 argument == "--iluminacion=alumbrada-6b" || argument == "--iluminacion=alumbrada-7d")
+        {
+            cinematica = argument != "--iluminacion=original";
+            alumbradaAnterior = argument == "--iluminacion=alumbrada-6b";
+            alumbradaCalida = argument == "--iluminacion=alumbrada-7d";
+        }
         else if (argument == "--senderos=original") tierraNatural = false;
         else if (argument == "--senderos=tierra") tierraNatural = true;
         else if (argument == "--revision-6c1=off") revision6c1 = false;
@@ -886,6 +1322,8 @@ int main(int argc, char** argv)
         else if (argument == "--distribucion=62") { useNewLayout = true; reducedLayout = true; }
         else if (argument == "--acceso=anterior") correctedAccess = false;
         else if (argument == "--acceso=ajustado") correctedAccess = true;
+        else if (argument == "--ornamentos-7c=off") ornamentosCeremoniales = false;
+        else if (argument == "--flores-tumbas=off") floresTumbas = false;
         else if (argument == "--validar-navegacion") validateNavigation = true;
         else if (argument == "--medir-fps" && !validate && i + 1 < argc)
         {
@@ -897,18 +1335,21 @@ int main(int argc, char** argv)
         }
         else
         {
-            std::cerr << "Uso: ConfigInicial.exe [--iglesia=v1|--iglesia=v2] [--ofrenda=v1|--ofrenda=v2|--ofrenda=v2-hibrida] [--skybox=on|off] [--muro=on|off] [--terreno=base|ampliado] [--distribucion=62|77|anterior|nueva] [--acceso=anterior|ajustado] [--validar-navegacion] [--ambiente=original|animado] [--demo-ambiente=campana|insecto|globos] [--globos=on|off] [--vegetacion=on|off] [--iluminacion=original|alumbrada|alumbrada-6b] [--senderos=original|tierra] [--revision-6c1=off] [--tierra-6c1=ligera] [--sombras=on|off] [--humo=on|off] [--cantoya-modelo=v1|v2] [--personajes=on|off] [--demo-personaje=flor|veladora|oracion|caminar|rodillas] [--pose-personaje=neutral|inclinada|brazo|rodillas] [--validar-personaje=poses|flor] [--validar-escena carpeta_existente | --medir-fps carpeta_existente]" << std::endl;
+            std::cerr << "Uso: ConfigInicial.exe [--iglesia=v1|--iglesia=v2] [--ofrenda=v1|--ofrenda=v2|--ofrenda=v2-hibrida] [--skybox=on|off] [--muro=on|off] [--terreno=base|ampliado] [--distribucion=62|77|anterior|nueva] [--acceso=anterior|ajustado] [--validar-navegacion] [--ambiente=original|animado] [--demo-ambiente=campana|insecto|globos] [--globos=on|off] [--vegetacion=on|off] [--fase7e=off] [--optimizacion-7f=off] [--vegetacion-7e=off] [--luz-7e=off] [--iluminacion=original|alumbrada|alumbrada-6b|alumbrada-7d] [--senderos=original|tierra] [--revision-6c1=off] [--tierra-6c1=ligera] [--sombras=on|off] [--humo=on|off] [--cantoya-modelo=v1|v2] [--personajes=on|off] [--demo-personaje=flor|veladora|oracion|caminar|rodillas] [--pose-personaje=neutral|inclinada|brazo|rodillas] [--validar-personaje=poses|flor] [--validar-escena carpeta_existente | --medir-fps carpeta_existente]" << std::endl;
             return EXIT_FAILURE;
         }
     }
     if (!useNewLayout) useExpandedTerrain=false;
     reducedLayout = reducedLayout && useNewLayout && useExpandedTerrain;
+    const bool ampliar7e = fase7e && reducedLayout && usePerimeter;
     const bool mostrarVegetacion = useVegetation && reducedLayout;
     const bool mostrarSombras = cinematica && usarSombras;
     const bool mostrarHumo = cinematica && usarHumo && useOfrendaV2;
     if (validateNavigation && (!validate || benchmark || !useExpandedTerrain || !usePerimeter || visitorDemoCamera))
         return EXIT_FAILURE;
-    if (useExpandedTerrain) camera=Camera(glm::vec3(0,1.7f,28),glm::vec3(0,1,0),-90,-3);
+    if (useExpandedTerrain)
+        camera = Camera({0, EYE_HEIGHT, usePerimeter && useNewLayout ? arrivalStartZ : 28.f},
+                        {0, 1, 0}, -90.f, usePerimeter && useNewLayout ? arrivalPitch : -3.f);
     if (visitorDemoCamera)
     {
         const glm::vec3 eye = demoAction ? demoAction->camara : glm::vec3(10.0f,1.7f,9.6f);
@@ -993,6 +1434,8 @@ int main(int argc, char** argv)
     }
 
     const bool alumbradaNueva = cinematica && !alumbradaAnterior;
+    const bool calida7d = alumbradaNueva && alumbradaCalida;
+    const bool refuerzo7e = ampliar7e && luz7e && calida7d;
 
     // CARGA DE MODELOS
     Model Piso((char*)"Models/piso.obj");
@@ -1009,7 +1452,6 @@ int main(int argc, char** argv)
     // otros modelos para decorar panteon
     Model iglesia((char*)"Models/iglesia.obj"); // V1 se conserva intacta.
     Model iglesiaV2("Models/Iglesia_Mixquic_V2/iglesia_mixquic_v2.obj", true);
-    Model cuervo((char*)"Models/cuervo.obj");
     Model maceta((char*)"Models/maceta_cempasuchil.obj");
     Model macizo((char*)"Models/cempasuchil_macizo.obj");
     Model cempasuchil("Models/cempasuchil.obj");
@@ -1021,7 +1463,9 @@ int main(int argc, char** argv)
     Model fogata((char*)"Models/fogata.obj");
     Model vela("Models/vela.obj",alumbradaNueva);
     Model luciernaga((char*)"Models/luciernaga.obj");
-    Model farol("Models/farol.obj",alumbradaNueva);
+    Model farol(ampliar7e ? "Models/Alumbrada_Mixquic_7E/farol_forjado.obj" : "Models/farol.obj",alumbradaNueva);
+    if(ampliar7e && validate)
+        std::cout<<"FAROL 7E: forja octogonal y vidrio ambar, triangulos="<<farol.TriangleCount()<<std::endl;
     Model veladora("Models/veladora.obj",alumbradaNueva);
     // Exportada desde Blender a Y-arriba, sin cambiar el archivo .blend.
     const char* ofrendaPath=useOfrendaHibrida ? "Models/Ofrenda_Mixquic_V2_Hibrida/ofrenda_v2_hibrida_prueba.obj" : (useOfrendaV2 ? "Models/Ofrenda_Mixquic_V2/ofrenda_mixquic_v2.obj" : "Models/ofrenda.obj");
@@ -1045,7 +1489,7 @@ int main(int argc, char** argv)
     }
 
     // La validacion impide aceptar un prototipo con recursos faltantes.
-    for (Model* model : { &Piso,&sol,&luna,&flor,&tumba,&tumba2,&tumba3,&iglesia,&iglesiaV2,&cuervo,&maceta,
+    for (Model* model : { &Piso,&sol,&luna,&flor,&tumba,&tumba2,&tumba3,&iglesia,&iglesiaV2,&maceta,
         &macizo,&cempasuchil,&cuervoCuerpo,&cuervoAlaDer,&cuervoAlaIzq,&fogata,&vela,&luciernaga,&farol,&veladora,&ofrenda })
         if (!model->IsLoaded()) { glfwTerminate(); return EXIT_FAILURE; }
 
@@ -1350,12 +1794,11 @@ int main(int argc, char** argv)
     {
         std::cerr << "ERROR: trayectoria de animacion." << std::endl; glfwTerminate(); return EXIT_FAILURE;
     }
-    Placement perchedCrow = Grounded(cuervo, glm::vec3(-3.2f, 0.65f, 17.5f), glm::vec3(1.2f));
     std::unique_ptr<Model> unifiedPaving;
     Placement paving=ground;
     if (useNewLayout) {
         unifiedPaving.reset(new Model(useExpandedTerrain ? "Models/Senderos_Mixquic_Unificados/senderos_ampliado.obj" : "Models/Senderos_Mixquic_Unificados/senderos_base.obj"));
-        if (!PrepareUnifiedScene(churchV1,churchV2,church,ground,altar,perchedCrow,graves,decorations,attached,allDecorations,surfaces,Piso,*unifiedPaving,paving,fogata,vela,farol,veladora,validate)) {
+        if (!PrepareUnifiedScene(churchV1,churchV2,church,ground,altar,graves,decorations,attached,allDecorations,surfaces,Piso,*unifiedPaving,paving,fogata,vela,farol,veladora,validate)) {
             std::cerr<<"ERROR: escena unificada no supera validaciones."<<std::endl;glfwTerminate();return EXIT_FAILURE;
         }
         if (validate && !ValidateAnimationPaths(church,graves,cuervoCuerpo,cuervoAlaDer,cuervoAlaIzq,luciernaga,sol,luna)) {
@@ -1368,10 +1811,17 @@ int main(int argc, char** argv)
         std::cerr << "ERROR 4E: distribucion alternativa no valida." << std::endl;
         return EXIT_FAILURE;
     }
+    // La primera base se conserva hasta terminar la selección de tumbas, que usa sus índices.
+    surfaces.erase(surfaces.begin());
+    const float arrivalDepth = arrivalGroundEndZ - ground.bounds.max.z;
+    const Placement arrivalGround = useExpandedTerrain && useNewLayout && usePerimeter
+        ? Grounded(Piso, {0, GROUND_Y, ground.bounds.max.z + arrivalDepth * .5f},
+                   {10.f, 1.f, arrivalDepth / (Piso.BoundsMax().z - Piso.BoundsMin().z)})
+        : ground;
     ambienteMixquic::CampanaInsecto ambiental;
     if (articulatedAmbient)
     {
-        std::vector<Bounds> obstacles = {churchV1.bounds,churchV2.bounds,altar.bounds,perchedCrow.bounds};
+        std::vector<Bounds> obstacles = {churchV1.bounds,churchV2.bounds,altar.bounds};
         for (const auto& item : visibleGraves) obstacles.push_back(item.bounds);
         for (const auto& item : allDecorations) obstacles.push_back(item.bounds);
         if (!ambiental.Preparar(iglesiaV2,luciernaga) || !ambiental.VueloLibre(obstacles))
@@ -1386,9 +1836,10 @@ int main(int argc, char** argv)
 
 
     std::vector<Model*> loaded = { &Piso,&sol,&luna,&flor,&tumba,&tumba2,&tumba3,&iglesia,&iglesiaV2,
-        &cuervo,&maceta,&macizo,&cempasuchil,&cuervoCuerpo,&cuervoAlaDer,&cuervoAlaIzq,&fogata,&vela,
+        &maceta,&macizo,&cempasuchil,&cuervoCuerpo,&cuervoAlaDer,&cuervoAlaIzq,&fogata,&vela,
         &luciernaga,&farol,&veladora,&ofrenda,&graveV1,&graveV2,&graveV3,&graveV4,&graveV5,&graveV6,&graveV7,&lightPot,&petals };
-    std::vector<Placement> drawn = { ground,church,altar,perchedCrow };
+    std::vector<Placement> drawn = { ground,church,altar };
+    if (useExpandedTerrain && useNewLayout && usePerimeter) drawn.push_back(arrivalGround);
     drawn.insert(drawn.end(), visibleGraves.begin(), visibleGraves.end()); drawn.insert(drawn.end(), allDecorations.begin(), allDecorations.end());
     for (Model* m : { &luna,&fogata,&vela,&farol,&veladora,&luciernaga,&cuervoCuerpo,&cuervoAlaDer,&cuervoAlaIzq })
         drawn.push_back(Grounded(*m, glm::vec3(0), glm::vec3(1)));
@@ -1397,7 +1848,7 @@ int main(int argc, char** argv)
     vegetacion4f::Vegetacion vegetacion;
     if (mostrarVegetacion)
     {
-        std::vector<Bounds> protegidos = {churchV1.bounds,churchV2.bounds,altar.bounds,perchedCrow.bounds,
+        std::vector<Bounds> protegidos = {churchV1.bounds,churchV2.bounds,altar.bounds,
             Grounded(fogata,posFogata,glm::vec3(ESC_FOGATA)).bounds,
             Grounded(vela,posVela,glm::vec3(ESC_VELA)).bounds,
             Grounded(farol,posFarol,glm::vec3(ESC_FAROL)).bounds,
@@ -1406,16 +1857,78 @@ int main(int argc, char** argv)
         for (const auto& item : allDecorations) protegidos.push_back(item.bounds);
         for (const auto& surface : surfaces)
             protegidos.push_back({surface.center-surface.size*.5f,surface.center+surface.size*.5f});
-        if (!vegetacion.Cargar(*unifiedPaving,protegidos)) return EXIT_FAILURE;
+        if (!vegetacion.Cargar(*unifiedPaving,protegidos,ampliar7e && plantas7e)) return EXIT_FAILURE;
+    }
+    std::unique_ptr<Model> macetaAgrupada, petalosAgrupados;
+    std::vector<Placement> flores;
+    if (floresTumbas && useExpandedTerrain && reducedLayout && unifiedPaving)
+    {
+        macetaAgrupada = std::make_unique<Model>("Models/Decoracion_Mixquic_3C/maceta_ligera_7b.obj");
+        petalosAgrupados = std::make_unique<Model>("Models/Decoracion_Mixquic_3C/petalos_camino_7b.obj");
+        if (macetaAgrupada->Meshes().size()!=4 || petalosAgrupados->Meshes().size()!=2 ||
+            macetaAgrupada->TriangleCount()!=lightPot.TriangleCount() ||
+            petalosAgrupados->TriangleCount()!=petals.TriangleCount())
+        {
+            std::cerr << "ERROR 7B: no coinciden las variantes de macetas y petalos." << std::endl;
+            return EXIT_FAILURE;
+        }
+        loaded.push_back(macetaAgrupada.get());
+        loaded.push_back(petalosAgrupados.get());
+        flores = CrearArreglos7B(graves,visibleGraves,allDecorations,surfaces,*unifiedPaving,vegetacion,
+            {churchV1.bounds,churchV2.bounds,altar.bounds,
+             Grounded(fogata,posFogata,glm::vec3(ESC_FOGATA)).bounds,
+             Grounded(vela,posVela,glm::vec3(ESC_VELA)).bounds,
+             Grounded(farol,posFarol,glm::vec3(ESC_FAROL)).bounds,
+             Grounded(veladora,posVeladora,glm::vec3(ESC_VELADORA)).bounds},
+            cempasuchil,macizo,*macetaAgrupada,*petalosAgrupados,veladora);
+        drawn.insert(drawn.end(),flores.begin(),flores.end());
+    }
+    Ceremonia7C ceremonia;
+    if (ornamentosCeremoniales && useExpandedTerrain && reducedLayout && usePerimeter && unifiedPaving)
+    {
+        std::vector<Bounds> ocupados={churchV1.bounds,churchV2.bounds,altar.bounds,
+            Grounded(fogata,posFogata,glm::vec3(ESC_FOGATA)).bounds,
+            Grounded(vela,posVela,glm::vec3(ESC_VELA)).bounds,
+            Grounded(farol,posFarol,glm::vec3(ESC_FAROL)).bounds,
+            Grounded(veladora,posVeladora,glm::vec3(ESC_VELADORA)).bounds};
+        for (const auto& tumba : visibleGraves) ocupados.push_back(tumba.bounds);
+        for (const auto& adorno : allDecorations) ocupados.push_back(adorno.bounds);
+        for (const auto& flor : flores) ocupados.push_back(flor.bounds);
+        vegetacion.AgregarPerimetro(ocupados);
+        if (!ceremonia.Cargar(*unifiedPaving,surfaces,ocupados)) return EXIT_FAILURE;
+        for (const auto& modelo : ceremonia.modelos) loaded.push_back(modelo.get());
+        drawn.insert(drawn.end(),ceremonia.piezas.begin(),ceremonia.piezas.end());
+    }
+    Adornos7E extras;
+    if(ampliar7e)
+    {
+        std::vector<Bounds> ocupados={churchV1.bounds,churchV2.bounds,altar.bounds,
+            Grounded(fogata,posFogata,glm::vec3(ESC_FOGATA)).bounds,
+            Grounded(vela,posVela,glm::vec3(ESC_VELA)).bounds,
+            Grounded(farol,posFarol,glm::vec3(ESC_FAROL)).bounds,
+            Grounded(veladora,posVeladora,glm::vec3(ESC_VELADORA)).bounds};
+        for(const auto& g : visibleGraves) ocupados.push_back(g.bounds);
+        for(const auto& d : allDecorations) ocupados.push_back(d.bounds);
+        for(const auto& d : flores) ocupados.push_back(d.bounds);
+        ocupados.insert(ocupados.end(),ceremonia.solidos.begin(),ceremonia.solidos.end());
+        vegetacion.AgregarPerimetro(ocupados);
+        if(!extras.Cargar(*unifiedPaving,surfaces,ocupados,vela,veladora)) return EXIT_FAILURE;
+        loaded.push_back(extras.monticuloFlores.get());
+        loaded.push_back(extras.monticuloPetalos.get());
+        drawn.insert(drawn.end(),extras.monticulos.begin(),extras.monticulos.end());
+        drawn.insert(drawn.end(),extras.luces.begin(),extras.luces.end());
     }
     std::unique_ptr<MixquicPerimeter> perimeter;
     if (usePerimeter && useExpandedTerrain && useNewLayout)
     {
         perimeter.reset(new MixquicPerimeter(correctedAccess));
-        std::vector<Bounds> obstacles = {churchV1.bounds, churchV2.bounds, altar.bounds, perchedCrow.bounds,
+        std::vector<Bounds> obstacles = {churchV1.bounds, churchV2.bounds, altar.bounds,
             Grounded(farol, posFarol, glm::vec3(ESC_FAROL)).bounds};
         for (const auto& grave : visibleGraves) obstacles.push_back(grave.bounds);
         for (const auto& decoration : allDecorations) obstacles.push_back(decoration.bounds);
+        for (const auto& flower : flores) obstacles.push_back(flower.bounds);
+        obstacles.insert(obstacles.end(),ceremonia.solidos.begin(),ceremonia.solidos.end());
+        obstacles.insert(obstacles.end(),extras.solidos.begin(),extras.solidos.end());
         vegetacion.AgregarPerimetro(obstacles);
         if (!perimeter->Load() || !perimeter->ValidateLayout(obstacles, paving))
         {
@@ -1424,6 +1937,14 @@ int main(int argc, char** argv)
         }
         walkingPerimeter = perimeter.get();
         perimeter->AddBudget(loaded, drawn);
+        if (!validate && !visitorDemoCamera && ambientDemo == ambienteMixquic::Demo::Ninguna)
+        {
+            const auto eye = camera.GetPosition();
+            std::cout << "LLEGADA: ojo=" << eye.x << "," << eye.y << "," << eye.z
+                      << " porton_z=" << MixquicPerimeter::frontZ
+                      << " suelo_exterior_hasta_z=" << arrivalGround.bounds.max.z
+                      << " porton_abierto=" << (perimeter->Angle() == perimeter->openAngle) << std::endl;
+        }
     }
     std::unique_ptr<VisitanteAnimado> visitor;
     std::vector<std::unique_ptr<visitanteAcciones::Accion>> actions;
@@ -1438,13 +1959,14 @@ int main(int argc, char** argv)
         if (fabs(UnifiedSupportPoint(position.x, position.z, surfaces, *unifiedPaving)) > .002f)
             return EXIT_FAILURE;
         visitor->Place(position, 90, surfaces);
-        std::vector<Bounds> obstacles = {churchV1.bounds, churchV2.bounds, altar.bounds, perchedCrow.bounds,
+        std::vector<Bounds> obstacles = {churchV1.bounds, churchV2.bounds, altar.bounds,
             Grounded(fogata, posFogata, glm::vec3(ESC_FOGATA)).bounds,
             Grounded(vela, posVela, glm::vec3(ESC_VELA)).bounds,
             Grounded(farol, posFarol, glm::vec3(ESC_FAROL)).bounds,
             Grounded(veladora, posVeladora, glm::vec3(ESC_VELADORA)).bounds};
         for (size_t i = 0; i < graves.size(); ++i) if (i != 57) obstacles.push_back(graves[i].bounds);
         for (const auto& decoration : allDecorations) obstacles.push_back(decoration.bounds);
+        for (const auto& flower : flores) obstacles.push_back(flower.bounds);
         std::vector<UnifiedSegment> routes(std::begin(unifiedExpandedSegments), std::end(unifiedExpandedSegments));
         if (!visitor->ValidateScene(obstacles, graves[57], routes)) return EXIT_FAILURE;
         visitor->PrepareFlowerAnimation();
@@ -1464,6 +1986,7 @@ int main(int argc, char** argv)
                     for (size_t i = 0; i < graves.size(); ++i)
                         if (i != track->tumba) blocking.push_back(graves[i].bounds);
                     for (const auto& decoration : allDecorations) blocking.push_back(decoration.bounds);
+                    for (const auto& flower : flores) blocking.push_back(flower.bounds);
                     if (!actor->Comprobar(blocking, graves[track->tumba], routes, *unifiedPaving)) return EXIT_FAILURE;
                 }
                 actions.push_back(std::move(actor));
@@ -1480,11 +2003,14 @@ int main(int argc, char** argv)
         navigation.iglesia = church.bounds;
         for (const auto& grave : visibleGraves) navigation.Agregar(grave.bounds);
         for (const auto& prop : allDecorations) navigation.Agregar(prop.bounds);
-        for (const auto& item : {altar,perchedCrow,Grounded(fogata,posFogata,glm::vec3(ESC_FOGATA)),
+        for (const auto& flower : flores) navigation.Agregar(flower.bounds);
+        for (const auto& item : {altar,Grounded(fogata,posFogata,glm::vec3(ESC_FOGATA)),
             Grounded(vela,posVela,glm::vec3(ESC_VELA)),Grounded(farol,posFarol,glm::vec3(ESC_FAROL)),
             Grounded(veladora,posVeladora,glm::vec3(ESC_VELADORA))}) navigation.Agregar(item.bounds);
         for (const auto& surface : surfaces) if (surface.size.y > .15f)
             navigation.Agregar({surface.center-surface.size*.5f,surface.center+surface.size*.5f});
+        for (const auto& ornamento : ceremonia.solidos) navigation.Agregar(ornamento);
+        for(const auto& x : extras.solidos) navigation.Agregar(x);
         vegetacion.AgregarNavegacion(navigation);
         walkingNavigation = &navigation;
     }
@@ -1588,9 +2114,11 @@ int main(int argc, char** argv)
     const Viewpoint* viewpoints=useExpandedTerrain?expandedViewpoints:baseViewpoints;
     struct GateView { Viewpoint camera; float angle; };
     const float openCapture = perimeter ? perimeter->openAngle : 75.f;
+    const glm::vec3 arrivalEye(0, EYE_HEIGHT, arrivalStartZ);
+    const glm::vec3 arrivalTarget = arrivalEye + glm::vec3(0, std::tan(glm::radians(arrivalPitch)), -1);
     const GateView perimeterViews[] = {
-        {{"28-acceso-exterior", {0,2.1f,38}, {0,2.2f,29}, 0}, openCapture},
-        {{"29-porton-cerrado", {0,2.1f,38}, {0,2.2f,29}, 0}, 0},
+        {{"28-acceso-exterior", arrivalEye, arrivalTarget, 0}, openCapture},
+        {{"29-porton-cerrado", arrivalEye, arrivalTarget, 0}, 0},
         {{"30-porton-intermedio", {0,2.1f,38}, {0,2.2f,29}, 0}, openCapture * .5f},
         {{"31-porton-desde-atrio", {0,1.7f,24}, {0,2.1f,30.5f}, 0}, openCapture},
         {{"32-esquina-acceso-este", {30,8,37}, {23,0.5f,26}, 0}, openCapture},
@@ -1666,19 +2194,34 @@ int main(int argc, char** argv)
         {"54-sector-este", {16.8f,2.2f,21.2f}, {20.9f,2.1f,-5.0f}, 0},
         {"55-alumbrada-contexto", {-9.3f,3.35f,-17.4f}, {-.65f,2.25f,-25.2f}, 0},
         {"56-copal-t065", {-1.80f,.98f,-23.38f}, {-1.02f,.52f,-25.03f}, .65f},
-        {"57-copal-t280", {-1.80f,.98f,-23.38f}, {-1.02f,.52f,-25.03f}, 2.8f}
+        {"57-copal-t280", {-1.80f,.98f,-23.38f}, {-1.02f,.52f,-25.03f}, 2.8f},
+        {"58-flores-oeste", {-11.7f,1.82f,8.35f}, {-9.12f,.62f,9.27f}, 0},
+        {"59-flores-este", {5.0f,1.72f,16.95f}, {6.5f,.65f,13.7f}, 0},
+        {"60-flores-veladoras", {16.55f,1.54f,-6.75f}, {13.74f,.58f,-8.35f}, 0},
+        {"61-flores-alumbrada", {5.12f,2.12f,-29.22f}, {.65f,.95f,-25.52f}, 0},
+        {"62-entrada-ceremonial", {0,2.65f,31.9f}, {0,3.01f,24.15f}, 0},
+        {"63-arco-interior-cerca", {-5.85f,2.55f,18.25f}, {-.1f,3.10f,24.15f}, 0},
+        {"64-monticulos-contexto", {-.55f,12.9f,34.1f}, {.1f,.54f,25.4f}, 0},
+        {"65-monticulo-poniente", {-7.30f,1.30f,28.35f}, {-5.85f,.28f,26.05f}, 0},
+        {"66-monticulo-oriente", {8.15f,1.23f,28.4f}, {6.40f,.28f,26.05f}, 0},
+        {"67-iglesia-ceremonial", {0,2.65f,8.45f}, {0,3.6f,-4.35f}, 0},
+        {"68-jarrones-iglesia", {4.25f,1.78f,1.25f}, {1.75f,1.20f,-3.4f}, 0},
+        {"69-parcela-oriente", {4.05f,2.32f,23.85f}, {8.56f,.65f,20.55f}, 0},
+        {"70-parcela-poniente", {-7.45f,2.04f,24.75f}, {-11.45f,.5f,20.95f}, 0},
+        {"71-farol-forjado", {-2.00f,1.63f,23.6f}, {-4.3f,1.4f,20.50f}, 0},
+        {"72-vegetacion-lateral", {15.7f,3.60f,20.2f}, {19.7f,1.9f,4.75f}, 0}
     };
     const int sceneAndGateViews = sceneViews + (perimeter ? static_cast<int>(sizeof(perimeterViews) / sizeof(perimeterViews[0])) : 0);
     const int captureViews = captureAmbient ? static_cast<int>(ambientViews.size()) : captureAction ? static_cast<int>(actionViews.size()) : captureFlower ? 8 : captureVisitorPoses ? 4
         : sceneAndGateViews + (validateNavigation ? static_cast<int>(sizeof(navViews)/sizeof(navViews[0])) : 0);
     const Viewpoint benchmarkViewpoints[]={
-        {"01-entrada",{0,1.7f,28},{0,4,-9.5f},0},
+        {"entrada",{0,EYE_HEIGHT,arrivalStartZ},{0,EYE_HEIGHT+.035f,arrivalStartZ-1},0},
         {"07-distribucion",{40,44,52},{0,0,-2},0},
+        {"67-iglesia",{0,2.65f,8.45f},{0,3.6f,-4.35f},0},
         {"06-alumbrada",{0,2,-15.2f},{0,1,-25.5f},0}
     };
     int captureIndex = 0;
     unsigned benchmarkLlamadas=0,benchmarkTriangulos=0;
-    const int benchmarkViews[] = { 0,6,5 };
     size_t benchmarkView = 0; int benchmarkFrame = 0;
     std::vector<double> frameTimes;
     std::ofstream fps;
@@ -1739,9 +2282,20 @@ int main(int argc, char** argv)
     }
     if (validateNavigation && (!walkingNavigation || !perimeter ||
         !navigation.ValidarRutas(reducedLayout,*perimeter) ||
+        !ceremonia.ComprobarPaso(navigation,*perimeter) ||
         (mostrarVegetacion && !vegetacion.ValidarTroncos(navigation,*perimeter)) ||
         !ValidateNavigation4E(window,*perimeter,navigation,navViews[1].eye,navViews[2].eye)))
         return EXIT_FAILURE;
+    if(validateNavigation && ampliar7e)
+    {
+        for(const auto& caja : extras.solidos)
+        {
+            const auto centro=(caja.min+caja.max)*.5f;
+            if(navigation.Libre({centro.x,centro.z},nullptr)) return EXIT_FAILURE;
+        }
+        std::cout<<"COLISIONES 7E: ornamentos_solidos="<<extras.solidos.size()
+                 <<" carril_visitante=libre recorrido_arco=libre"<<std::endl;
+    }
     SkyBox skybox;
     if (useSkybox && !skybox.Load()) resultCode = EXIT_FAILURE;
     bool verifySkybox = validate && !benchmark;
@@ -1798,7 +2352,9 @@ int main(int argc, char** argv)
     alumbrada4g::Perfil perfil(lightingShader.Program);
     alumbrada4g::Sombras sombras;
     alumbrada4g::Humo humo;
-    if ((mostrarSombras && (!sombras.Crear(visibleGraves,churchV1,churchV2) ||
+    std::vector<Placement> ornamentosConSombra = flores;
+    ornamentosConSombra.insert(ornamentosConSombra.end(),ceremonia.piezas.begin(),ceremonia.piezas.end());
+    if ((mostrarSombras && (!sombras.Crear(visibleGraves,ornamentosConSombra,churchV1,churchV2) ||
          !sombras.Actualizar(useIglesiaV2,validateNavigation ? captureDirectory+"/profundidad_direccional.pgm" : ""))) ||
         (mostrarHumo && !humo.Crear()))
     {
@@ -1819,8 +2375,16 @@ int main(int argc, char** argv)
             Grounded(farol,posFarol,glm::vec3(ESC_FAROL)),
             Grounded(vela,posVela,glm::vec3(ESC_VELA)),
             Grounded(veladora,posVeladora,glm::vec3(ESC_VELADORA))};
+        auto adornosConLuz=allDecorations;
+        auto piezasConLuz=ceremonia.piezas;
+        if(refuerzo7e)
+        {
+            adornosConLuz.insert(adornosConLuz.end(),extras.luces.begin(),extras.luces.end());
+            piezasConLuz.insert(piezasConLuz.end(),extras.monticulos.begin(),extras.monticulos.end());
+        }
         if(!luzLocal.Crear(lightingShader.Program,unifiedPaving ? &paving : nullptr,
-                          altar,allDecorations,luminariasFijas,farol,vela,veladora,useExpandedTerrain,revision6c1,tierraLigera6c1))
+                          altar,adornosConLuz,luminariasFijas,piezasConLuz,farol,vela,veladora,
+                          useExpandedTerrain,usePerimeter,revision6c1,tierraLigera6c1,calida7d,refuerzo7e))
         {
             std::cerr<<"ERROR ALUMBRADA 6C: recursos de terreno o resplandor."<<std::endl;
             luzLocal.Liberar();
@@ -1829,7 +2393,8 @@ int main(int argc, char** argv)
         }
     }
     std::cout<<"ALUMBRADA PERFIL: modo="<<(cinematica?"alumbrada":"original")<<" sombras="<<mostrarSombras
-        <<" humo="<<mostrarHumo<<" copal="<<copal.x<<","<<copal.y<<","<<copal.z<<std::endl;
+        <<" humo="<<mostrarHumo<<" copal="<<copal.x<<","<<copal.y<<","<<copal.z
+        <<" variante="<<(refuerzo7e?"7e":calida7d?"7d":alumbradaAnterior?"6b":alumbradaNueva?"7c":"original")<<std::endl;
 
     const bool repetirVisitas=playFlower && !visitorDemoCamera && !captureVisitor;
     if (repetirVisitas && visitor)
@@ -1960,7 +2525,7 @@ int main(int argc, char** argv)
         if (cinematica)
         {
             const float pulsos[]={parpadeoFogata,parpadeoVela,destelloLuc,titileoFarol,parpadeoVeladora};
-            perfil.Aplicar(moonPos,pointLightPositions,pulsos,camera.GetPosition(),camera.GetFront(),alumbradaNueva);
+            perfil.Aplicar(moonPos,pointLightPositions,pulsos,camera.GetPosition(),camera.GetFront(),alumbradaNueva,calida7d);
         }
         else
         {
@@ -2036,6 +2601,12 @@ int main(int argc, char** argv)
         }
 
         glm::mat4 view = camera.GetViewMatrix();
+        PlacementFrustum frustum;
+        if (descartarFueraDeVista) frustum.Update(projection * view);
+        const auto visibleEnCamara = [&](const Placement& item)
+        {
+            return !descartarFueraDeVista || frustum.Intersects(item.bounds);
+        };
         const GLint modelLoc = lightingShader.DrawLocations().model;
         GLint viewLoc = glGetUniformLocation(lightingShader.Program, "view");
         GLint projLoc = glGetUniformLocation(lightingShader.Program, "projection");
@@ -2048,6 +2619,11 @@ int main(int argc, char** argv)
         luzLocal.Tierra(sueloNuevo);
         glUniform2f(glGetUniformLocation(lightingShader.Program, "textureTiling"), useExpandedTerrain?25.0f:17.0f, useExpandedTerrain?32.0f:21.0f);
         DrawPlacement(ground, lightingShader, concreteTexture);
+        if (perimeter)
+        {
+            glUniform2f(glGetUniformLocation(lightingShader.Program, "textureTiling"), 25.f, arrivalDepth * .5f);
+            DrawPlacement(arrivalGround, lightingShader, concreteTexture);
+        }
         glUniform2f(glGetUniformLocation(lightingShader.Program, "textureTiling"), 1.0f, 1.0f);
         luzLocal.Tierra(false);
         for (const Surface& surface : surfaces) DrawSurface(surface, VAO, lightingShader);
@@ -2057,16 +2633,24 @@ int main(int argc, char** argv)
         if (articulatedAmbient && useIglesiaV2) ambiental.DibujarTemplo(iglesiaV2,churchV2.matrix,lightingShader,t);
         else DrawPlacement(useIglesiaV2 ? churchV2 : churchV1, lightingShader);
         // ZONA 5 y tumba principal de ZONA 6: tres instancias base reutilizadas.
-        for (const Placement& grave : visibleGraves) DrawPlacement(grave, lightingShader);
+        for (const Placement& grave : visibleGraves)
+            if (visibleEnCamara(grave)) DrawPlacement(grave, lightingShader);
         const auto dibujarLuminaria=[&](const Placement& item)
         {
+            if (!visibleEnCamara(item)) return;
             luzLocal.Fuente(item.model,farol,vela,veladora);
             DrawPlacement(item,lightingShader);
         };
         for (const Placement& decoration : decorations) dibujarLuminaria(decoration);
         for (const auto& prop : attached) dibujarLuminaria(prop.item);
+        for (const auto& luz : extras.luces) dibujarLuminaria(luz);
         luzLocal.Fuente(nullptr,farol,vela,veladora);
-        DrawPlacement(perchedCrow, lightingShader);
+        for (const auto& flower : flores)
+            if (visibleEnCamara(flower)) DrawPlacement(flower,lightingShader);
+        for (const auto& ornamento : ceremonia.piezas)
+            if (visibleEnCamara(ornamento)) DrawPlacement(ornamento,lightingShader);
+        for (const auto& monticulo : extras.monticulos)
+            if (visibleEnCamara(monticulo)) DrawPlacement(monticulo,lightingShader);
         DrawPlacement(altar, lightingShader);
         if (visitor && showFlower)
         {
@@ -2270,15 +2854,15 @@ int main(int argc, char** argv)
                     double sum = 0; for (double v : frameTimes)sum += v;
                     std::sort(frameTimes.begin(), frameTimes.end());
                     double average = 1000.0 * frameTimes.size() / sum;
-                    fps << (useNewLayout ? "nueva" : "anterior") << "," << viewpoints[benchmarkViews[benchmarkView]].name
+                    fps << (useNewLayout ? "nueva" : "anterior") << "," << benchmarkViewpoints[benchmarkView].name
                         << "," << SCREEN_WIDTH << "," << SCREEN_HEIGHT << ",30," << frameTimes.size() << ","
                         << std::fixed << std::setprecision(3) << average << "," << frameTimes[frameTimes.size() / 2]
                         << "," << frameTimes[static_cast<size_t>(.95 * (frameTimes.size() - 1))]
                         << "," << benchmarkLlamadas << "," << benchmarkTriangulos << "\n";
                     fps.flush();
-                    std::cout << "FPS: " << viewpoints[benchmarkViews[benchmarkView]].name << " " << average << std::endl;
+                    std::cout << "FPS: " << benchmarkViewpoints[benchmarkView].name << " " << average << std::endl;
                     frameTimes.clear(); benchmarkFrame = 0;
-                    if (++benchmarkView == 3)glfwSetWindowShouldClose(window, GL_TRUE);
+                    if (++benchmarkView == sizeof(benchmarkViewpoints)/sizeof(benchmarkViewpoints[0]))glfwSetWindowShouldClose(window, GL_TRUE);
                 }
             }
             else {
@@ -2345,7 +2929,9 @@ void DoMovement(float seconds)
         const float elapsed = seconds >= 0 ? seconds : deltaTime;
         const glm::vec2 from(before.x,before.z);
         const glm::vec2 bounds(useExpandedTerrain ? 24.65f : 16.65f,useExpandedTerrain ? 31.65f : 20.65f);
-        const glm::vec2 to = glm::clamp(from + glm::normalize(input)*(speed*elapsed),-bounds,bounds);
+        glm::vec2 maximum = bounds;
+        if (walkingPerimeter) maximum.y = arrivalGroundEndZ - navegacion4e::Navegacion::radio;
+        const glm::vec2 to = glm::clamp(from + glm::normalize(input)*(speed*elapsed),-bounds,maximum);
         const glm::vec2 safe = walkingNavigation ? walkingNavigation->Desplazar(from,to,walkingPerimeter)
             : walkingPerimeter ? walkingPerimeter->ResolveMotion(from,to) : to;
         camera.SetWalkingXZ(safe.x,safe.y);
