@@ -34,7 +34,7 @@ bool UnifiedCheckTrajectory(const std::vector<Placement>& obstacles)
 }
 
 bool PrepareUnifiedScene(Placement& churchV1,Placement& churchV2,Placement& church,Placement& ground,Placement& altar,
-    Placement& perchedCrow,std::vector<Placement>& graves,std::vector<Placement>& groundProps,
+    std::vector<Placement>& graves,std::vector<Placement>& groundProps,
     std::vector<AttachedProp>& attached,std::vector<Placement>& allProps,std::vector<Surface>& surfaces,
     Model& floorModel,Model& pavingModel,Placement& paving,Model& fogata,Model& vela,Model& farol,Model& veladora,bool verbose)
 {
@@ -50,7 +50,6 @@ bool PrepareUnifiedScene(Placement& churchV1,Placement& churchV2,Placement& chur
         UnifiedTranslate(altar,{0,0,-6.25f});UnifiedTranslate(graves[76],{0,0,-6.25f});
         ground=Grounded(floorModel,{0,0,0},{10,1,12.8f});
         posFogata.z-=6.25f;posVela.z-=1;posFarol.z+=11;posVeladora.z-=6.25f;
-        UnifiedTranslate(perchedCrow,{0,0,11});
     }
     const glm::vec3* offsets=useExpandedTerrain?unifiedExpandedOffsets:unifiedBaseOffsets;
     for(size_t i=0;i<groundProps.size();++i)UnifiedTranslate(groundProps[i],offsets[i]);
@@ -93,7 +92,7 @@ bool PrepareUnifiedScene(Placement& churchV1,Placement& churchV2,Placement& chur
         for(size_t j=0;j<groundProps.size();++j)if(i!=j&&OverlapXZ(groundProps[i].bounds,groundProps[j].bounds))return false;
     }
     std::vector<Placement> staticItems={Grounded(fogata,posFogata,glm::vec3(ESC_FOGATA)),Grounded(vela,posVela,glm::vec3(ESC_VELA)),
-        Grounded(farol,posFarol,glm::vec3(ESC_FAROL)),Grounded(veladora,posVeladora,glm::vec3(ESC_VELADORA)),perchedCrow};
+        Grounded(farol,posFarol,glm::vec3(ESC_FAROL)),Grounded(veladora,posVeladora,glm::vec3(ESC_VELADORA))};
     std::vector<Placement> architecture={church,altar};architecture.insert(architecture.end(),graves.begin(),graves.end());
     architecture.insert(architecture.end(),allProps.begin(),allProps.end());architecture.insert(architecture.end(),staticItems.begin(),staticItems.end());
     if(!UnifiedCheckTrajectory(architecture))return false;

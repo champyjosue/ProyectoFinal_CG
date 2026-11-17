@@ -1,0 +1,145 @@
+newmtl tierra_tostada
+Ka 0.05510 0.02888 0.01368
+Kd 0.29000 0.15200 0.07200
+Ks .065 .06 .05
+Ns 8
+d 1
+illum 2
+
+newmtl tierra_ocres
+Ka 0.06460 0.03705 0.01767
+Kd 0.34000 0.19500 0.09300
+Ks .065 .06 .05
+Ns 8
+d 1
+illum 2
+
+newmtl tierra_humus
+Ka 0.04617 0.02356 0.01197
+Kd 0.24300 0.12400 0.06300
+Ks .065 .06 .05
+Ns 8
+d 1
+illum 2
+
+newmtl tule
+Ka 0.04560 0.02717 0.01045
+Kd 0.24000 0.14300 0.05500
+Ks .065 .06 .05
+Ns 8
+d 1
+illum 2
+
+newmtl tule_claro
+Ka 0.08170 0.05510 0.02071
+Kd 0.43000 0.29000 0.10900
+Ks .065 .06 .05
+Ns 8
+d 1
+illum 2
+
+newmtl terracota
+Ka 0.09880 0.03363 0.01501
+Kd 0.52000 0.17700 0.07900
+Ks .065 .06 .05
+Ns 8
+d 1
+illum 2
+
+newmtl borde_barro
+Ka 0.12920 0.05187 0.02223
+Kd 0.68000 0.27300 0.11700
+Ks .065 .06 .05
+Ns 8
+d 1
+illum 2
+
+newmtl follaje
+Ka 0.03040 0.04940 0.01159
+Kd 0.16000 0.26000 0.06100
+Ks .065 .06 .05
+Ns 8
+d 1
+illum 2
+
+newmtl hoja_olivo
+Ka 0.04750 0.06650 0.01463
+Kd 0.25000 0.35000 0.07700
+Ks .065 .06 .05
+Ns 8
+d 1
+illum 2
+
+newmtl flor_naranja
+Ka 0.18620 0.05434 0.00304
+Kd 0.98000 0.28600 0.01600
+Ks .065 .06 .05
+Ns 8
+d 1
+illum 2
+
+newmtl flor_oro
+Ka 0.19000 0.10393 0.00551
+Kd 1.00000 0.54700 0.02900
+Ks .065 .06 .05
+Ns 8
+d 1
+illum 2
+
+newmtl flor_rojiza
+Ka 0.15580 0.03705 0.00304
+Kd 0.82000 0.19500 0.01600
+Ks .065 .06 .05
+Ns 8
+d 1
+illum 2
+
+newmtl corazon
+Ka 0.16910 0.06308 0.00304
+Kd 0.89000 0.33200 0.01600
+Ks .065 .06 .05
+Ns 8
+d 1
+illum 2
+
+newmtl cera
+Ka 0.17480 0.14326 0.08721
+Kd 0.92000 0.75400 0.45900
+Ks .065 .06 .05
+Ns 8
+d 1
+illum 2
+
+newmtl vidrio_ambar
+Ka 0.13870 0.05472 0.01273
+Kd 0.73000 0.28800 0.06700
+Ks .065 .06 .05
+Ns 8
+d 1
+illum 2
+
+newmtl llama
+Ka 0.19000 0.09842 0.02128
+Kd 1.00000 0.51800 0.11200
+Ks .065 .06 .05
+Ns 8
+d 1
+illum 2
+Ke 1.55 .49 .12
+
+newmtl nucleo_llama
+Ka 0.19000 0.16340 0.07980
+Kd 1.00000 0.86000 0.42000
+Ks .065 .06 .05
+Ns 8
+d 1
+illum 2
+Ke 1.92 1.25 .37
+
+newmtl lazo
+Ka 0.11970 0.04142 0.01368
+Kd 0.63000 0.21800 0.07200
+Ks .065 .06 .05
+Ns 8
+d 1
+illum 2

@@ -21,6 +21,7 @@ const Luz puntuales[] = {
 };
 const Luz luna6c = {{.005f,.009f,.019f},{.022f,.034f,.076f},{.023f,.032f,.057f},0,0};
 const Luz principal6c = {{.019f,.030f,.056f},{.084f,.118f,.197f},{.037f,.056f,.093f},0,0};
+const Luz principal7d = {{.032f,.031f,.051f},{.110f,.109f,.167f},{.037f,.056f,.093f},0,0};
 const Luz puntuales6c[] = {
     {{.085f,.039f,.011f},{2.10f,1.03f,.34f},{.43f,.22f,.072f},.155f,.070f},
     {{.065f,.039f,.017f},{1.72f,.89f,.36f},{.24f,.12f,.05f},.120f,.092f},
@@ -43,11 +44,11 @@ public:
     }
 
     void Aplicar(glm::vec3 posicionLuna,const glm::vec3 (&posiciones)[5],const float (&pulso)[5],
-                 glm::vec3 ojo,glm::vec3 rumbo,bool nueva) const
+                 glm::vec3 ojo,glm::vec3 rumbo,bool nueva,bool calida) const
     {
         glUniform3fv(dir,1,glm::value_ptr(direccion));
         glUniform3fv(lunar.posicion,1,glm::value_ptr(posicionLuna));
-        Color(direct,nueva ? principal6c : principal,1.f);
+        Color(direct,calida ? principal7d : nueva ? principal6c : principal,1.f);
         Color(lunar,nueva ? luna6c : luna,1.f);
         const auto& luces=nueva ? puntuales6c : puntuales;
         for(size_t i=0;i<5;++i) Puntual(puntos[i],luces[i],posiciones[i],pulso[i]);
@@ -90,7 +91,8 @@ public:
     static constexpr int dimension=2048;
     static constexpr int unidad=7;
 
-    bool Crear(const std::vector<Placement>& tumbas,const Placement& v1,const Placement& v2)
+    bool Crear(const std::vector<Placement>& tumbas,const std::vector<Placement>& flores,
+        const Placement& v1,const Placement& v2)
     {
         shader=std::make_unique<Shader>("Shader/SombraDir.vs","Shader/SombraDir.frag");
         GLint linked=0;
@@ -98,6 +100,9 @@ public:
         if(!linked) return false;
         std::vector<glm::vec3> vertices;
         for(const auto& item:tumbas) Anexar(vertices,item,false);
+        const size_t verticesTumbas=vertices.size();
+        for(const auto& item:flores)
+            if(item.bounds.max.y-item.bounds.min.y>.01f) Anexar(vertices,item,false);
         loteTumbas=static_cast<GLsizei>(vertices.size());
         Anexar(vertices,v1,false);
         loteV1=static_cast<GLsizei>(vertices.size())-loteTumbas;
@@ -137,7 +142,8 @@ public:
         luzClip=glm::ortho(-45.f,45.f,-47.f,47.f,4.f,144.f)*
             glm::lookAt(centro-glm::normalize(direccion)*74.f,centro,glm::vec3(0,1,0));
         std::cout<<"SOMBRAS FBO: completo="<<completo<<" resolucion="<<dimension<<"x"<<dimension
-            <<" lotes=2 tumbas="<<tumbas.size()<<" v2_triangulos="<<loteV2/3<<" tumbas_triangulos="<<loteTumbas/3<<std::endl;
+            <<" lotes=2 tumbas="<<tumbas.size()<<" v2_triangulos="<<loteV2/3<<" tumbas_triangulos="<<verticesTumbas/3
+            <<" flores_triangulos="<<(static_cast<size_t>(loteTumbas)-verticesTumbas)/3<<std::endl;
         return completo && glGetError()==GL_NO_ERROR;
     }
 

@@ -7,9 +7,11 @@ class Ambiente
 public:
     bool Crear(GLuint programa, const Placement* camino, const Placement& ofrenda,
                const std::vector<Placement>& adornos, const std::vector<Placement>& fuentesFijas,
-               const Model& farol, const Model& vela, const Model& veladora, bool ampliado, bool revisar, bool ligera)
+               const std::vector<Placement>& ceremonia, const Model& farol, const Model& vela,
+               const Model& veladora, bool ampliado, bool muro, bool revisar, bool ligera, bool perfilCalido, bool reforzar)
     {
         revision=revisar;
+        calida=perfilCalido;
         extension = ampliado ? glm::vec2(25,32) : glm::vec2(17,21);
         locFuente=glGetUniformLocation(programa,"fuenteDecorativa");
         locTierra=glGetUniformLocation(programa,"tierraMixquic");
@@ -42,8 +44,20 @@ public:
                 const float ancho=(std::max)(p.bounds.max.x-p.bounds.min.x,p.bounds.max.z-p.bounds.min.z);
                 const float radio=poste ? glm::clamp(ancho*.93f,.23f,.48f) : glm::clamp(ancho*.56f,.075f,.22f);
                 Calentar(calidez,centro,poste?3.1f:1.24f,poste?.48f:.14f);
-                const bool veladoraRevisada=revision && p.model==&veladora;
-                if(veladoraRevisada)
+                const bool esVeladora=p.model==&veladora;
+                const bool veladoraRevisada=revision && esVeladora;
+                if(calida)
+                {
+                    Calentar(calidez,centro,poste ? (reforzar ? 4.65f : 4.0f) : (reforzar ? 2.03f : 1.82f),
+                             poste ? (reforzar ? .70f : .58f) : (reforzar ? .28f : .24f));
+                    if(revision && esVeladora)
+                        Calentar(calidezVeladoras,centro,reforzar ? 2.02f : 1.88f,reforzar ? .37f : .34f);
+                    const float radioCalido=poste ? glm::clamp(ancho*1.75f,.46f,.72f) :
+                        glm::clamp(ancho*1.58f,esVeladora ? .29f : .23f,.43f);
+                    AgregarHalo(halos,centro,radioCalido*(reforzar && poste ? 1.12f : 1.f),
+                                poste ? (reforzar ? .49f : .43f) : esVeladora ? .58f : .51f,esVeladora);
+                }
+                else if(veladoraRevisada)
                 {
                     Calentar(calidezVeladoras,centro,1.42f,.23f);
                     AgregarHalo(halos,centro,glm::clamp(ancho*1.16f,.105f,.23f),.40f,true);
@@ -54,13 +68,53 @@ public:
         for(const auto& p:adornos) anexar(p);
         for(const auto& p:fuentesFijas) anexar(p);
         Calentar(calidez,(ofrenda.bounds.min+ofrenda.bounds.max)*.5f,4.1f,.78f);
+        size_t llamasMonticulos=0,llamasOfrenda=0;
+        if(calida)
+        {
+            const auto sumarLlamas=[&](const Placement& objeto,float umbral,float radio,float fuerza)
+            {
+                const auto llamas=CentrosDeLlamas(objeto,umbral);
+                for(const auto& centro : llamas)
+                {
+                    Calentar(calidez,centro,1.25f,.17f);
+                    AgregarHalo(halos,centro,radio,fuerza,true);
+                }
+                return llamas.size();
+            };
+            for(const auto& pieza : ceremonia)
+                llamasMonticulos+=sumarLlamas(pieza,1.8f,.235f,.52f);
+            llamasOfrenda=sumarLlamas(ofrenda,5.f,.184f,.46f);
+            Calentar(calidez,(ofrenda.bounds.min+ofrenda.bounds.max)*.5f,6.15f,.39f);
+            if(ampliado)
+            {
+                // Reflejos de las luminarias a ambos lados del acceso y de la fachada.
+                for(float lado : {-1.f,1.f})
+                {
+                    Calentar(calidez,{lado*2.9f,.7f,-3.95f},5.1f,.63f);
+                    if(muro) Calentar(calidez,{lado*2.65f,.8f,MixquicPerimeter::frontZ-.33f},5.45f,.58f);
+                    if(!ceremonia.empty()) Calentar(calidez,{lado*2.7f,.7f,24.15f},4.45f,.58f);
+                    if(reforzar)
+                    {
+                        Calentar(calidez,{lado*2.85f,.4f,19.6f},5.05f,.32f);
+                        Calentar(calidez,{lado*3.4f,.4f,8.8f},5.3f,.25f);
+                        Calentar(calidez,{lado*2.65f,.45f,-3.18f},4.95f,.37f);
+                    }
+                }
+            }
+        }
         const int canales=revision ? 3 : 2;
         std::vector<unsigned char> datos(lado*lado*canales);
         for(size_t i=0;i<huella.size();++i)
         {
             datos[i*canales]=static_cast<unsigned char>(glm::clamp(huella[i],0.f,1.f)*255.f+.5f);
-            datos[i*canales+1]=static_cast<unsigned char>(glm::clamp(calidez[i],0.f,1.f)*255.f+.5f);
-            if(revision) datos[i*canales+2]=static_cast<unsigned char>(glm::clamp(calidezVeladoras[i],0.f,1.f)*255.f+.5f);
+            const auto codificar=[&](float valor)
+            {
+                // El rebote saturado cae con suavidad incluso junto a muchos cirios.
+                const float limitado=calida ? valor/(.79f+valor) : glm::clamp(valor,0.f,1.f);
+                return static_cast<unsigned char>(limitado*255.f+.5f);
+            };
+            datos[i*canales+1]=codificar(calidez[i]);
+            if(revision) datos[i*canales+2]=codificar(calidezVeladoras[i]);
         }
         glActiveTexture(GL_TEXTURE0);
         glGenTextures(1,&mapa);
@@ -91,6 +145,12 @@ public:
         glUniform1i(glGetUniformLocation(programa,"muestraTierra"),9);
         glUniform2fv(glGetUniformLocation(programa,"extensionAlumbrada"),1,glm::value_ptr(extension));
         glUniform1i(glGetUniformLocation(programa,"alumbrada6c"),1);
+        glUniform1i(glGetUniformLocation(programa,"alumbradaCalida7D"),calida);
+        glUniform1i(glGetUniformLocation(programa,"alumbradaRefuerzo7E"),reforzar);
+        if(calida)
+            std::cout<<"ALUMBRADA 7D: llamas_monticulos="<<llamasMonticulos<<" llamas_ofrenda="<<llamasOfrenda
+                     <<" halos="<<halos.size()/6<<" lote=1 mapa="<<lado<<"x"<<lado
+                     <<" luces_puntuales=5"<<std::endl;
         if(!halos.empty() && !CrearHalos(halos)) return false;
         std::cout<<"ALUMBRADA 6C: faroles="<<postes<<" velas="<<cirios<<" veladoras="<<vasos
                  <<" halos="<<vertices/6<<" mapa="<<lado<<"x"<<lado<<" plantas_extra=0"<<std::endl;
@@ -141,7 +201,7 @@ public:
         glGetIntegerv(GL_BLEND_EQUATION_ALPHA,&ecuacionA);
         glEnable(GL_BLEND);
         glBlendEquation(GL_FUNC_ADD);
-        glBlendFuncSeparate(GL_ONE,GL_ONE,GL_ZERO,GL_ONE);
+        glBlendFuncSeparate(GL_ONE,calida ? GL_ONE_MINUS_SRC_COLOR : GL_ONE,GL_ZERO,GL_ONE);
         glDepthMask(GL_FALSE);
         shader->Use();
         glUniformMatrix4fv(vista,1,GL_FALSE,glm::value_ptr(view));
@@ -169,7 +229,7 @@ public:
 private:
     static constexpr int lado=512;
     struct VerticeHalo { glm::vec3 centro; glm::vec2 esquina; glm::vec3 parametros; };
-    bool revision=false;
+    bool revision=false,calida=false;
     glm::vec2 extension{25,32};
     GLuint mapa=0,tierra=0,vao=0,vbo=0;
     GLint locTierra=-1,locFuente=-1,vista=-1,proy=-1,tiempo=-1;
@@ -225,6 +285,31 @@ private:
             }
     }
 
+    static std::vector<glm::vec3> CentrosDeLlamas(const Placement& objeto,float umbral)
+    {
+        struct Grupo { glm::vec3 centro; size_t puntos; };
+        std::vector<Grupo> grupos;
+        constexpr float distancia=.061f;
+        for(const auto& mesh : objeto.model->Meshes())
+        {
+            // Un material de núcleo puede contener las llamas de varias veladoras.
+            if(mesh.materialEmission.r < umbral) continue;
+            for(const auto& v : mesh.vertices)
+            {
+                const auto p=glm::vec3(objeto.matrix*glm::vec4(v.Position,1));
+                const auto cercano=std::find_if(grupos.begin(),grupos.end(),[&](const Grupo& grupo) {
+                    const glm::vec3 d=p-grupo.centro;
+                    return glm::dot(d,d)<distancia*distancia;
+                });
+                if(cercano==grupos.end()) grupos.push_back({p,1});
+                else cercano->centro+=(p-cercano->centro)/float(++cercano->puntos);
+            }
+        }
+        std::vector<glm::vec3> centros;
+        for(const auto& grupo : grupos) if(grupo.puntos>3) centros.push_back(grupo.centro);
+        return centros;
+    }
+
     static void AgregarHalo(std::vector<VerticeHalo>& buffer,glm::vec3 c,float r,float fuerza,bool veladora)
     {
         const glm::vec2 esquinas[]={{-1,-1},{1,-1},{1,1},{-1,-1},{1,1},{-1,1}};
@@ -240,6 +325,14 @@ private:
         vista=glGetUniformLocation(shader->Program,"vista");
         proy=glGetUniformLocation(shader->Program,"proyeccion");
         tiempo=glGetUniformLocation(shader->Program,"tiempo");
+        if(calida)
+        {
+            GLint programaAnterior=0;
+            glGetIntegerv(GL_CURRENT_PROGRAM,&programaAnterior);
+            shader->Use();
+            glUniform1i(glGetUniformLocation(shader->Program,"alumbradaCalida7D"),1);
+            glUseProgram(static_cast<GLuint>(programaAnterior));
+        }
         glGenVertexArrays(1,&vao);
         glGenBuffers(1,&vbo);
         glBindVertexArray(vao);
